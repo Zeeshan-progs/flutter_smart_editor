@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import '../models/enums.dart';
 
@@ -97,6 +98,9 @@ class TextFormatSpan {
 /// heading, list item, etc. A block contains a list of [TextFormatSpan]s
 /// for its text content.
 abstract class BlockNode {
+  /// Unique identifier for this block, preserved across type changes to maintain focus/state
+  final String id;
+
   /// The inline text spans that make up this block's content
   List<TextFormatSpan> spans;
 
@@ -104,9 +108,11 @@ abstract class BlockNode {
   SmartTextAlign alignment;
 
   BlockNode({
+    String? id,
     List<TextFormatSpan>? spans,
     this.alignment = SmartTextAlign.left,
-  }) : spans = spans ?? [TextFormatSpan.plain('')];
+  })  : id = id ?? UniqueKey().toString(),
+        spans = spans ?? [TextFormatSpan.plain('')];
 
   /// The HTML tag name for this block (e.g. "p", "h1", "h2")
   String get tag;
@@ -170,6 +176,7 @@ abstract class BlockNode {
 /// A paragraph block (`<p>`)
 class ParagraphNode extends BlockNode {
   ParagraphNode({
+    super.id,
     super.spans,
     super.alignment,
   });
@@ -182,6 +189,7 @@ class ParagraphNode extends BlockNode {
 
   @override
   BlockNode deepCopy() => ParagraphNode(
+        id: id,
         spans: spans.map((s) => s.copyWith()).toList(),
         alignment: alignment,
       );
@@ -193,6 +201,7 @@ class HeadingNode extends BlockNode {
 
   HeadingNode({
     required this.level,
+    super.id,
     super.spans,
     super.alignment,
   }) : assert(level >= 1 && level <= 6);
@@ -223,6 +232,7 @@ class HeadingNode extends BlockNode {
   @override
   BlockNode deepCopy() => HeadingNode(
         level: level,
+        id: id,
         spans: spans.map((s) => s.copyWith()).toList(),
         alignment: alignment,
       );

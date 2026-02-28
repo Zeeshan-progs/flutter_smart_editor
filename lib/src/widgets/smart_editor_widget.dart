@@ -48,8 +48,8 @@ class SmartEditorWidget extends StatefulWidget {
 }
 
 class SmartEditorWidgetState extends State<SmartEditorWidget> {
-  final List<FocusNode> _focusNodes = [];
-  final List<GlobalKey<BlockWidgetState>> _blockKeys = [];
+  final Map<String, FocusNode> _focusNodes = {};
+  final Map<String, GlobalKey<BlockWidgetState>> _blockKeys = {};
   final SmartHtmlSerializer _serializer = SmartHtmlSerializer();
   int _focusedBlockIndex = 0;
   bool _initialized = false;
@@ -72,8 +72,8 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
         _initialized = true;
         widget.callbacks.onInit?.call();
 
-        if (widget.keyboardSettings.autofocus && _focusNodes.isNotEmpty) {
-          _focusNodes[0].requestFocus();
+        if (widget.keyboardSettings.autofocus && _document.blocks.isNotEmpty) {
+          _focusNodes[_document.blocks[0].id]?.requestFocus();
         }
       }
     });
@@ -81,7 +81,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   @override
   void dispose() {
-    for (final node in _focusNodes) {
+    for (final node in _focusNodes.values) {
       node.dispose();
     }
     super.dispose();
@@ -89,13 +89,23 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   /// Synchronizes the focus nodes and block keys with the document blocks
   void _syncFocusNodes() {
-    while (_focusNodes.length < _document.blocks.length) {
-      _focusNodes.add(FocusNode());
-      _blockKeys.add(GlobalKey<BlockWidgetState>());
+    final currentIds = _document.blocks.map((b) => b.id).toSet();
+
+    // Add new ones
+    for (final block in _document.blocks) {
+      if (!_focusNodes.containsKey(block.id)) {
+        _focusNodes[block.id] = FocusNode();
+        _blockKeys[block.id] =
+            GlobalKey<BlockWidgetState>(debugLabel: block.id);
+      }
     }
-    while (_focusNodes.length > _document.blocks.length) {
-      _focusNodes.removeLast().dispose();
-      _blockKeys.removeLast();
+
+    // Remove old ones
+    final toRemove =
+        _focusNodes.keys.where((id) => !currentIds.contains(id)).toList();
+    for (final id in toRemove) {
+      _focusNodes.remove(id)?.dispose();
+      _blockKeys.remove(id);
     }
   }
 
@@ -145,9 +155,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
     // Focus the new block after rebuild
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (newBlockIndex < _focusNodes.length) {
-        _focusNodes[newBlockIndex].requestFocus();
-        _blockKeys[newBlockIndex].currentState?.setCursorPosition(0);
+      if (newBlockIndex < _document.blocks.length) {
+        final id = _document.blocks[newBlockIndex].id;
+        _focusNodes[id]?.requestFocus();
+        _blockKeys[id]?.currentState?.setCursorPosition(0);
       }
     });
 
@@ -169,9 +180,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (targetIndex < _focusNodes.length) {
-        _focusNodes[targetIndex].requestFocus();
-        _blockKeys[targetIndex].currentState?.setCursorPosition(cursorOffset);
+      if (targetIndex < _document.blocks.length) {
+        final id = _document.blocks[targetIndex].id;
+        _focusNodes[id]?.requestFocus();
+        _blockKeys[id]?.currentState?.setCursorPosition(cursorOffset);
       }
     });
 
@@ -190,9 +202,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (blockIndex < _focusNodes.length) {
-        _focusNodes[blockIndex].requestFocus();
-        _blockKeys[blockIndex].currentState?.setCursorPosition(cursorOffset);
+      if (blockIndex < _document.blocks.length) {
+        final id = _document.blocks[blockIndex].id;
+        _focusNodes[id]?.requestFocus();
+        _blockKeys[id]?.currentState?.setCursorPosition(cursorOffset);
       }
     });
 
@@ -213,7 +226,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
           if (parsed.blocks.isNotEmpty) {
             _docController.insertParsedDocument(
               blockIndex,
-              _blockKeys[blockIndex].currentState?.cursorOffset ?? 0,
+              _blockKeys[_document.blocks[blockIndex].id]
+                      ?.currentState
+                      ?.cursorOffset ??
+                  0,
               parsed,
             );
             rebuild();
@@ -236,7 +252,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
             if (parsed.blocks.isNotEmpty) {
               _docController.insertParsedDocument(
                 blockIndex,
-                _blockKeys[blockIndex].currentState?.cursorOffset ?? 0,
+                _blockKeys[_document.blocks[blockIndex].id]
+                        ?.currentState
+                        ?.cursorOffset ??
+                    0,
                 parsed,
               );
               rebuild();
@@ -246,7 +265,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
           _docController.insertText(
             blockIndex,
-            _blockKeys[blockIndex].currentState?.cursorOffset ?? 0,
+            _blockKeys[_document.blocks[blockIndex].id]
+                    ?.currentState
+                    ?.cursorOffset ??
+                0,
             text,
           );
           rebuild();
@@ -277,7 +299,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
       // Delay hiding slightly to prevent flickering when moving between blocks
       Future.delayed(const Duration(milliseconds: 50), () {
-        final anyFocused = _focusNodes.any((node) => node.hasFocus);
+        final anyFocused = _focusNodes.values.any((node) => node.hasFocus);
         if (!anyFocused) {
           KeyboardDoneOverlay.hide();
         }
@@ -304,7 +326,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
     // Get the current span's format at cursor position as a base
     final block = _document.blocks[blockIndex];
-    final cursorOffset = _blockKeys[blockIndex].currentState?.cursorOffset ?? 0;
+    final cursorOffset = _blockKeys[block.id]?.currentState?.cursorOffset ?? 0;
     final loc = block.getSpanAt(cursorOffset);
     final baseSpan = block.spans[loc.spanIndex];
 
@@ -328,12 +350,20 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   int get focusedBlockIndex => _focusedBlockIndex;
 
   /// Returns the cursor offset in the focused block
-  int? get cursorOffset =>
-      _blockKeys[_focusedBlockIndex].currentState?.cursorOffset;
+  int? get cursorOffset {
+    if (_focusedBlockIndex >= _document.blocks.length) return null;
+    return _blockKeys[_document.blocks[_focusedBlockIndex].id]
+        ?.currentState
+        ?.cursorOffset;
+  }
 
   /// Returns the selection in the focused block
-  TextSelection? get selection =>
-      _blockKeys[_focusedBlockIndex].currentState?.selection;
+  TextSelection? get selection {
+    if (_focusedBlockIndex >= _document.blocks.length) return null;
+    return _blockKeys[_document.blocks[_focusedBlockIndex].id]
+        ?.currentState
+        ?.selection;
+  }
 
   /// Forces a rebuild of all blocks
   void rebuild() {
@@ -346,7 +376,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final blockIndex = _focusedBlockIndex;
       if (blockIndex < _document.blocks.length) {
-        final offset = _blockKeys[blockIndex].currentState?.cursorOffset ?? 0;
+        final offset = _blockKeys[_document.blocks[blockIndex].id]
+                ?.currentState
+                ?.cursorOffset ??
+            0;
         final formats = _docController.getFormatAt(blockIndex, offset);
         widget.onFormatStateChanged?.call(blockIndex, formats);
       }
@@ -371,11 +404,12 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: List.generate(_document.blocks.length, (index) {
+              final block = _document.blocks[index];
               return BlockWidget(
-                key: _blockKeys[index],
-                block: _document.blocks[index],
+                key: _blockKeys[block.id],
+                block: block,
                 blockIndex: index,
-                focusNode: _focusNodes[index],
+                focusNode: _focusNodes[block.id]!,
                 onTextChanged: _onTextChanged,
                 onEnter: _onEnter,
                 onBackspaceAtStart: _onBackspaceAtStart,

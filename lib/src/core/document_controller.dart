@@ -572,31 +572,39 @@ class DocumentController {
     final oldBlock = document.blocks[blockIndex];
     final spans = oldBlock.spans;
     final alignment = oldBlock.alignment;
+    final id = oldBlock.id;
 
     BlockNode newBlock;
     switch (newType) {
       case BlockType.paragraph:
-        newBlock = ParagraphNode(spans: spans, alignment: alignment);
+        newBlock = ParagraphNode(id: id, spans: spans, alignment: alignment);
         break;
       case BlockType.heading1:
-        newBlock = HeadingNode(level: 1, spans: spans, alignment: alignment);
+        newBlock =
+            HeadingNode(id: id, level: 1, spans: spans, alignment: alignment);
         break;
       case BlockType.heading2:
-        newBlock = HeadingNode(level: 2, spans: spans, alignment: alignment);
+        newBlock =
+            HeadingNode(id: id, level: 2, spans: spans, alignment: alignment);
         break;
       case BlockType.heading3:
-        newBlock = HeadingNode(level: 3, spans: spans, alignment: alignment);
+        newBlock =
+            HeadingNode(id: id, level: 3, spans: spans, alignment: alignment);
         break;
       case BlockType.heading4:
-        newBlock = HeadingNode(level: 4, spans: spans, alignment: alignment);
+        newBlock =
+            HeadingNode(id: id, level: 4, spans: spans, alignment: alignment);
         break;
       case BlockType.heading5:
-        newBlock = HeadingNode(level: 5, spans: spans, alignment: alignment);
+        newBlock =
+            HeadingNode(id: id, level: 5, spans: spans, alignment: alignment);
         break;
       case BlockType.heading6:
-        newBlock = HeadingNode(level: 6, spans: spans, alignment: alignment);
+        newBlock =
+            HeadingNode(id: id, level: 6, spans: spans, alignment: alignment);
         break;
     }
+
     document.blocks[blockIndex] = newBlock;
 
     _notifyChanged();
