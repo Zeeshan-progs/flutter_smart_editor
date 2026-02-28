@@ -209,6 +209,33 @@ class BlockWidgetState extends State<BlockWidget> {
     // Check for text changes
     final currentText = _textController.text;
     if (currentText != widget.block.plainText) {
+      // Intercept soft keyboard newlines (Enter key)
+      if (currentText.contains('\n')) {
+        final indexOfNewline = currentText.indexOf('\n');
+
+        // Restore the text controller to its previous state momentarily
+        // so that splitBlock splits the original spans, not the \n-mutilated string
+        _isInternalUpdate = true;
+        _textController.text = widget.block.plainText;
+        _textController.selection =
+            TextSelection.collapsed(offset: indexOfNewline);
+        _isInternalUpdate = false;
+
+        // Perform the text insertion for anything typed *before* the newline
+        if (indexOfNewline > 0 &&
+            currentText.substring(0, indexOfNewline) !=
+                widget.block.plainText) {
+          widget.onTextChanged(
+            widget.blockIndex,
+            currentText.substring(0, indexOfNewline),
+          );
+        }
+
+        // Now trigger the block split at the exact newline position
+        widget.onEnter(widget.blockIndex, indexOfNewline);
+        return;
+      }
+
       _isInternalUpdate = true;
       widget.onTextChanged(widget.blockIndex, currentText);
       _isInternalUpdate = false;
