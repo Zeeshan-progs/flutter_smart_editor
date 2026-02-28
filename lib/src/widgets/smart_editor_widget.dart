@@ -11,6 +11,7 @@ import '../models/callbacks.dart';
 import 'block_widget.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import '../core/html_parser.dart';
+import 'keyboard_done_overlay.dart';
 
 /// The main editor widget that renders the document as a list of blocks.
 ///
@@ -262,6 +263,8 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       _focusedBlockIndex = blockIndex;
       widget.callbacks.onFocus?.call();
 
+      KeyboardDoneOverlay.show(context);
+
       // Clear pending format when changing blocks
       _pendingFormat = null;
 
@@ -271,6 +274,14 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       widget.onFormatStateChanged?.call(blockIndex, formats);
     } else {
       widget.callbacks.onBlur?.call();
+
+      // Delay hiding slightly to prevent flickering when moving between blocks
+      Future.delayed(const Duration(milliseconds: 50), () {
+        final anyFocused = _focusNodes.any((node) => node.hasFocus);
+        if (!anyFocused) {
+          KeyboardDoneOverlay.hide();
+        }
+      });
     }
   }
 
