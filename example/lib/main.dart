@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_editor/flutter_smart_editor.dart';
 
@@ -103,16 +104,19 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
               ),
               callbacks: SmartEditorCallbacks(
                 onInit: () {
-                  debugPrint('Editor initialized!');
+                  developer.log('Editor initialized!', name: 'SmartEditor');
                 },
                 onChangeContent: (html) {
-                  debugPrint('Content changed: $html');
+                  // Pretty print the HTML tags for the logger
+                  final prettyHtml = (html ?? '').replaceAll('><', '>\n<');
+                  developer.log('Content changed:\n$prettyHtml',
+                      name: 'SmartEditor');
                 },
                 onFocus: () {
-                  debugPrint('Editor focused');
+                  developer.log('Editor focused', name: 'SmartEditor');
                 },
                 onBlur: () {
-                  debugPrint('Editor blurred');
+                  developer.log('Editor blurred', name: 'SmartEditor');
                 },
               ),
             ),

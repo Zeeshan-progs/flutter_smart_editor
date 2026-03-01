@@ -527,8 +527,18 @@ class DocumentController {
     }
 
     // Ensure both halves have at least one span
-    if (leftSpans.isEmpty) leftSpans.add(TextFormatSpan.plain(''));
-    if (rightSpans.isEmpty) rightSpans.add(TextFormatSpan.plain(''));
+    if (leftSpans.isEmpty) {
+      leftSpans.add(TextFormatSpan.plain(''));
+    }
+
+    if (rightSpans.isEmpty) {
+      // Inherit the format from the last left span if possible, to carry over styles to the new line
+      if (leftSpans.isNotEmpty) {
+        rightSpans.add(leftSpans.last.copyWith(text: ''));
+      } else {
+        rightSpans.add(TextFormatSpan.plain(''));
+      }
+    }
 
     // Update the current block with left spans
     block.spans = leftSpans;

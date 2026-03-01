@@ -160,7 +160,9 @@ class BlockWidgetState extends State<BlockWidget> {
   @override
   void initState() {
     super.initState();
-    _textController = _RichTextEditingController(text: widget.block.plainText);
+    final initialText =
+        widget.block.plainText.isEmpty ? '\u200B' : widget.block.plainText;
+    _textController = _RichTextEditingController(text: initialText);
     _syncFormatSpans();
     _textController.addListener(_onControllerChanged);
   }
@@ -173,7 +175,8 @@ class BlockWidgetState extends State<BlockWidget> {
     _syncFormatSpans();
 
     // Update text if it changed externally
-    final newText = widget.block.plainText;
+    final newText =
+        widget.block.plainText.isEmpty ? '\u200B' : widget.block.plainText;
     if (_textController.text != newText && !_isInternalUpdate) {
       _isInternalUpdate = true;
       final cursorPos = _textController.selection.baseOffset;
@@ -181,6 +184,9 @@ class BlockWidgetState extends State<BlockWidget> {
       // Try to preserve cursor position
       if (cursorPos <= newText.length) {
         _textController.selection = TextSelection.collapsed(offset: cursorPos);
+      } else {
+        _textController.selection =
+            TextSelection.collapsed(offset: newText.length);
       }
       _isInternalUpdate = false;
     }
@@ -208,26 +214,43 @@ class BlockWidgetState extends State<BlockWidget> {
 
     // Check for text changes
     final currentText = _textController.text;
-    if (currentText != widget.block.plainText) {
+    final expectedText =
+        widget.block.plainText.isEmpty ? '\u200B' : widget.block.plainText;
+
+    if (currentText != expectedText) {
+      // 1. Backspace on empty line
+      if (expectedText == '\u200B' && currentText.isEmpty) {
+        widget.onBackspaceAtStart(widget.blockIndex);
+        return;
+      }
+
+      // 2. Typing into an empty line
+      var cleanedText = currentText;
+      if (expectedText == '\u200B' &&
+          currentText.contains('\u200B') &&
+          currentText.length > 1) {
+        cleanedText = currentText.replaceAll('\u200B', '');
+      }
+
       // Intercept soft keyboard newlines (Enter key)
-      if (currentText.contains('\n')) {
-        final indexOfNewline = currentText.indexOf('\n');
+      if (cleanedText.contains('\n')) {
+        final indexOfNewline = cleanedText.indexOf('\n');
 
         // Restore the text controller to its previous state momentarily
         // so that splitBlock splits the original spans, not the \n-mutilated string
         _isInternalUpdate = true;
-        _textController.text = widget.block.plainText;
-        _textController.selection =
-            TextSelection.collapsed(offset: indexOfNewline);
+        _textController.text = expectedText;
+        _textController.selection = TextSelection.collapsed(
+            offset: indexOfNewline.clamp(0, expectedText.length));
         _isInternalUpdate = false;
 
         // Perform the text insertion for anything typed *before* the newline
         if (indexOfNewline > 0 &&
-            currentText.substring(0, indexOfNewline) !=
+            cleanedText.substring(0, indexOfNewline) !=
                 widget.block.plainText) {
           widget.onTextChanged(
             widget.blockIndex,
-            currentText.substring(0, indexOfNewline),
+            cleanedText.substring(0, indexOfNewline),
           );
         }
 
@@ -237,7 +260,7 @@ class BlockWidgetState extends State<BlockWidget> {
       }
 
       _isInternalUpdate = true;
-      widget.onTextChanged(widget.blockIndex, currentText);
+      widget.onTextChanged(widget.blockIndex, cleanedText);
       _isInternalUpdate = false;
     }
 
