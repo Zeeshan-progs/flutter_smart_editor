@@ -144,7 +144,11 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   void _onEnter(int blockIndex, int offset) {
     widget.callbacks.onEnter?.call();
 
-    final newBlockIndex = _docController.splitBlock(blockIndex, offset);
+    final newBlockIndex = _docController.splitBlock(
+      blockIndex,
+      offset,
+      pendingFormat: _pendingFormat,
+    );
 
     // Clear pending format on Enter
     _pendingFormat = null;

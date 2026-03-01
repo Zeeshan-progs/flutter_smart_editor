@@ -494,7 +494,7 @@ class DocumentController {
   /// Used when the user presses Enter.
   ///
   /// Returns the index of the new (second) block.
-  int splitBlock(int blockIndex, int offset) {
+  int splitBlock(int blockIndex, int offset, {TextFormatSpan? pendingFormat}) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) {
       return blockIndex;
     }
@@ -532,8 +532,10 @@ class DocumentController {
     }
 
     if (rightSpans.isEmpty) {
-      // Inherit the format from the last left span if possible, to carry over styles to the new line
-      if (leftSpans.isNotEmpty) {
+      // Inherit the format from the explicit pending format, or last left span
+      if (pendingFormat != null) {
+        rightSpans.add(pendingFormat.copyWith(text: ''));
+      } else if (leftSpans.isNotEmpty) {
         rightSpans.add(leftSpans.last.copyWith(text: ''));
       } else {
         rightSpans.add(TextFormatSpan.plain(''));

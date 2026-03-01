@@ -160,9 +160,7 @@ class BlockWidgetState extends State<BlockWidget> {
   @override
   void initState() {
     super.initState();
-    final initialText =
-        widget.block.plainText.isEmpty ? '\u200B' : widget.block.plainText;
-    _textController = _RichTextEditingController(text: initialText);
+    _textController = _RichTextEditingController(text: widget.block.plainText);
     _syncFormatSpans();
     _textController.addListener(_onControllerChanged);
   }
@@ -175,8 +173,7 @@ class BlockWidgetState extends State<BlockWidget> {
     _syncFormatSpans();
 
     // Update text if it changed externally
-    final newText =
-        widget.block.plainText.isEmpty ? '\u200B' : widget.block.plainText;
+    final newText = widget.block.plainText;
     if (_textController.text != newText && !_isInternalUpdate) {
       _isInternalUpdate = true;
       final cursorPos = _textController.selection.baseOffset;
@@ -184,9 +181,6 @@ class BlockWidgetState extends State<BlockWidget> {
       // Try to preserve cursor position
       if (cursorPos <= newText.length) {
         _textController.selection = TextSelection.collapsed(offset: cursorPos);
-      } else {
-        _textController.selection =
-            TextSelection.collapsed(offset: newText.length);
       }
       _isInternalUpdate = false;
     }
@@ -214,47 +208,29 @@ class BlockWidgetState extends State<BlockWidget> {
 
     // Check for text changes
     final currentText = _textController.text;
-    final expectedText =
-        widget.block.plainText.isEmpty ? '\u200B' : widget.block.plainText;
-
-    if (currentText != expectedText) {
-      // 1. Backspace on empty line
-      if (expectedText == '\u200B' && currentText.isEmpty) {
+    if (currentText != widget.block.plainText) {
+      if (currentText.isEmpty && widget.block.plainText.isEmpty) {
+        // Some soft keyboards emit empty string replacements when backspacing on empty lines
         widget.onBackspaceAtStart(widget.blockIndex);
         return;
       }
 
-      // 2. Typing into an empty line
-      var cleanedText = currentText;
-      if (expectedText == '\u200B' &&
-          currentText.contains('\u200B') &&
-          currentText.length > 1) {
-        cleanedText = currentText.replaceAll('\u200B', '');
-      }
-
       // Intercept soft keyboard newlines (Enter key)
-      if (cleanedText.contains('\n')) {
-        final indexOfNewline = cleanedText.indexOf('\n');
-
-        int recoveredOffset = indexOfNewline;
-        if (expectedText == '\u200B') recoveredOffset = 1;
+      if (currentText.contains('\n')) {
+        final indexOfNewline = currentText.indexOf('\n');
+        final cleanedText = currentText.replaceAll('\n', '');
 
         // Restore the text controller to its previous state momentarily
         // so that splitBlock splits the original spans, not the \n-mutilated string
         _isInternalUpdate = true;
-        _textController.text = expectedText;
-        _textController.selection = TextSelection.collapsed(
-            offset: recoveredOffset.clamp(0, expectedText.length));
+        _textController.text = widget.block.plainText;
+        _textController.selection =
+            TextSelection.collapsed(offset: indexOfNewline);
         _isInternalUpdate = false;
 
-        // Perform the text insertion for anything typed *before* the newline
-        if (indexOfNewline > 0 &&
-            cleanedText.substring(0, indexOfNewline) !=
-                widget.block.plainText) {
-          widget.onTextChanged(
-            widget.blockIndex,
-            cleanedText.substring(0, indexOfNewline),
-          );
+        // Apply any predictive text additions that came bundled with the Enter key
+        if (cleanedText != widget.block.plainText) {
+          widget.onTextChanged(widget.blockIndex, cleanedText);
         }
 
         // Now trigger the block split at the exact newline position
@@ -263,7 +239,7 @@ class BlockWidgetState extends State<BlockWidget> {
       }
 
       _isInternalUpdate = true;
-      widget.onTextChanged(widget.blockIndex, cleanedText);
+      widget.onTextChanged(widget.blockIndex, currentText);
       _isInternalUpdate = false;
     }
 
@@ -271,38 +247,18 @@ class BlockWidgetState extends State<BlockWidget> {
     final currentSelection = _textController.selection;
     if (currentSelection != _lastReportedSelection &&
         currentSelection.isValid) {
-      // Force cursor to the right of \u200B if they placed it at 0
-      if (expectedText == '\u200B' && currentSelection.baseOffset == 0) {
-        _isInternalUpdate = true;
-        _textController.selection = const TextSelection.collapsed(offset: 1);
-        _lastReportedSelection = _textController.selection;
-        _isInternalUpdate = false;
-      } else {
-        _lastReportedSelection = currentSelection;
-      }
-
-      int reportedBase = _lastReportedSelection.baseOffset;
-      int reportedExtent = _lastReportedSelection.extentOffset;
-      if (expectedText == '\u200B') {
-        reportedBase = 0;
-        reportedExtent = 0;
-      }
-
+      _lastReportedSelection = currentSelection;
       widget.onSelectionChanged(
         widget.blockIndex,
-        reportedBase,
-        reportedExtent,
+        currentSelection.baseOffset,
+        currentSelection.extentOffset,
       );
     }
   }
 
   /// Sets the cursor position from outside
   void setCursorPosition(int offset) {
-    int actualOffset = offset;
-    if (widget.block.plainText.isEmpty) {
-      actualOffset = 1;
-    }
-    final clamped = actualOffset.clamp(0, _textController.text.length);
+    final clamped = offset.clamp(0, _textController.text.length);
     _isInternalUpdate = true;
     _textController.selection = TextSelection.collapsed(offset: clamped);
     _lastReportedSelection = _textController.selection;
@@ -310,18 +266,10 @@ class BlockWidgetState extends State<BlockWidget> {
   }
 
   /// Gets the current cursor offset
-  int get cursorOffset {
-    if (widget.block.plainText.isEmpty) return 0;
-    return _textController.selection.baseOffset;
-  }
+  int get cursorOffset => _textController.selection.baseOffset;
 
   /// Gets the current selection
-  TextSelection get selection {
-    if (widget.block.plainText.isEmpty) {
-      return const TextSelection.collapsed(offset: 0);
-    }
-    return _textController.selection;
-  }
+  TextSelection get selection => _textController.selection;
 
   /// Returns the text length
   int get textLength => _textController.text.length;
@@ -331,10 +279,8 @@ class BlockWidgetState extends State<BlockWidget> {
     _isInternalUpdate = true;
     _textController.text = text;
     if (cursorOffset != null) {
-      int actualOffset = cursorOffset;
-      if (text == '\u200B') actualOffset = 1;
       _textController.selection =
-          TextSelection.collapsed(offset: actualOffset.clamp(0, text.length));
+          TextSelection.collapsed(offset: cursorOffset.clamp(0, text.length));
     }
     _isInternalUpdate = false;
   }
@@ -422,8 +368,12 @@ class BlockWidgetState extends State<BlockWidget> {
 
             if (event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-              widget.onEnter(
-                  widget.blockIndex, _textController.selection.baseOffset);
+              // Only handle hardware enter keys here. Soft keyboard newlines are handled in _onControllerChanged.
+              if (HardwareKeyboard.instance.logicalKeysPressed
+                  .contains(LogicalKeyboardKey.enter)) {
+                widget.onEnter(
+                    widget.blockIndex, _textController.selection.baseOffset);
+              }
             } else if (event.logicalKey == LogicalKeyboardKey.backspace) {
               if (_textController.selection.baseOffset == 0 &&
                   _textController.selection.extentOffset == 0) {
