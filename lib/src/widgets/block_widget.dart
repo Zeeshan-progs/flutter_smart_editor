@@ -236,12 +236,15 @@ class BlockWidgetState extends State<BlockWidget> {
       if (cleanedText.contains('\n')) {
         final indexOfNewline = cleanedText.indexOf('\n');
 
+        int recoveredOffset = indexOfNewline;
+        if (expectedText == '\u200B') recoveredOffset = 1;
+
         // Restore the text controller to its previous state momentarily
         // so that splitBlock splits the original spans, not the \n-mutilated string
         _isInternalUpdate = true;
         _textController.text = expectedText;
         _textController.selection = TextSelection.collapsed(
-            offset: indexOfNewline.clamp(0, expectedText.length));
+            offset: recoveredOffset.clamp(0, expectedText.length));
         _isInternalUpdate = false;
 
         // Perform the text insertion for anything typed *before* the newline
@@ -268,18 +271,38 @@ class BlockWidgetState extends State<BlockWidget> {
     final currentSelection = _textController.selection;
     if (currentSelection != _lastReportedSelection &&
         currentSelection.isValid) {
-      _lastReportedSelection = currentSelection;
+      // Force cursor to the right of \u200B if they placed it at 0
+      if (expectedText == '\u200B' && currentSelection.baseOffset == 0) {
+        _isInternalUpdate = true;
+        _textController.selection = const TextSelection.collapsed(offset: 1);
+        _lastReportedSelection = _textController.selection;
+        _isInternalUpdate = false;
+      } else {
+        _lastReportedSelection = currentSelection;
+      }
+
+      int reportedBase = _lastReportedSelection.baseOffset;
+      int reportedExtent = _lastReportedSelection.extentOffset;
+      if (expectedText == '\u200B') {
+        reportedBase = 0;
+        reportedExtent = 0;
+      }
+
       widget.onSelectionChanged(
         widget.blockIndex,
-        currentSelection.baseOffset,
-        currentSelection.extentOffset,
+        reportedBase,
+        reportedExtent,
       );
     }
   }
 
   /// Sets the cursor position from outside
   void setCursorPosition(int offset) {
-    final clamped = offset.clamp(0, _textController.text.length);
+    int actualOffset = offset;
+    if (widget.block.plainText.isEmpty) {
+      actualOffset = 1;
+    }
+    final clamped = actualOffset.clamp(0, _textController.text.length);
     _isInternalUpdate = true;
     _textController.selection = TextSelection.collapsed(offset: clamped);
     _lastReportedSelection = _textController.selection;
@@ -287,10 +310,18 @@ class BlockWidgetState extends State<BlockWidget> {
   }
 
   /// Gets the current cursor offset
-  int get cursorOffset => _textController.selection.baseOffset;
+  int get cursorOffset {
+    if (widget.block.plainText.isEmpty) return 0;
+    return _textController.selection.baseOffset;
+  }
 
   /// Gets the current selection
-  TextSelection get selection => _textController.selection;
+  TextSelection get selection {
+    if (widget.block.plainText.isEmpty) {
+      return const TextSelection.collapsed(offset: 0);
+    }
+    return _textController.selection;
+  }
 
   /// Returns the text length
   int get textLength => _textController.text.length;
@@ -300,8 +331,10 @@ class BlockWidgetState extends State<BlockWidget> {
     _isInternalUpdate = true;
     _textController.text = text;
     if (cursorOffset != null) {
+      int actualOffset = cursorOffset;
+      if (text == '\u200B') actualOffset = 1;
       _textController.selection =
-          TextSelection.collapsed(offset: cursorOffset.clamp(0, text.length));
+          TextSelection.collapsed(offset: actualOffset.clamp(0, text.length));
     }
     _isInternalUpdate = false;
   }
