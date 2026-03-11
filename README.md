@@ -8,6 +8,12 @@ A highly customizable, pure Dart and Flutter rich text editor.
 
 > **💡 Inspiration:** This package was heavily inspired by the popular [`html_editor_enhanced`](https://pub.dev/packages/html_editor_enhanced) package. However, where `html_editor_enhanced` relies on embedding a webview and bridging JavaScript to Flutter, `flutter_smart_editor` is built **100% in pure Dart and Flutter**. This guarantees native performance, eliminates tedious WebView configuration, avoids cross-platform bridging bugs, and gives developers full, customizable control over every pixel of the UI.
 
+## 📱 Example
+
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/images/formatting_screenshot.png" height="400" alt="Formatting Example"/>
+</p>
+
 ## ✨ Features (Phase 1)
 
 - **Rich Text Formatting**: Bold, Italic, Underline, and Strikethrough.
