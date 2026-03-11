@@ -169,7 +169,7 @@ Subscribe to events happening inside the editor.
 
 ## 📄 License
 
-This package is licensed under the MIT License.
+This package is licensed under the [MIT License](LICENSE).
 
 ## 🤝 Contributing
 
