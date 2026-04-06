@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0
+## 1.0.1
 
 - Initial release
 - Core editing: paragraphs, headings (H1-H6)

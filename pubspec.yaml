@@ -1,6 +1,6 @@
 name: flutter_smart_editor
 description: A pure Flutter rich text HTML editor with no WebView dependency. Fully customizable with granular settings for editor, toolbar, scroll, keyboard, selection, and styling.
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/Zeeshan-progs/flutter_smart_editor
 
 environment:
