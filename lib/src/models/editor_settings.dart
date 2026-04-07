@@ -61,6 +61,7 @@ class SmartEditorSettings {
     this.onKeyUp,
     this.onKeyDown,
     this.onPaste,
+    this.onTagSerialize,
   });
 
   // ─── Core & HTML ──────────────────────────────────────────────
@@ -200,4 +201,14 @@ class SmartEditorSettings {
 
   /// Called when text is pasted into the editor
   final void Function()? onPaste;
+
+  /// Custom tag serialization callback.
+  /// Allows users to intercept and modify any HTML tag before it's written.
+  final String? Function(
+          SmartTagType type,
+          String tag,
+          Map<String, String> attributes,
+          Map<String, String> styles,
+          String content)?
+      onTagSerialize;
 }

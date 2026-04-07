@@ -7,6 +7,16 @@ import '../models/enums.dart';
 /// Produces clean, minimal HTML by merging inline formatting tags
 /// and only outputting attributes when they differ from defaults.
 class SmartHtmlSerializer {
+  SmartHtmlSerializer({this.onTagSerialize});
+
+  /// Custom tag serialization callback.
+  String? Function(
+      SmartTagType type,
+      String tag,
+      Map<String, String> attributes,
+      Map<String, String> styles,
+      String content)? onTagSerialize;
+
   /// Serializes a [Document] into an HTML string.
   String serialize(Document document) {
     final buffer = StringBuffer();
@@ -19,30 +29,56 @@ class SmartHtmlSerializer {
   /// Serializes a single block node into the buffer
   void _serializeBlock(BlockNode block, StringBuffer buffer) {
     final tag = block.tag;
+    final attributes = <String, String>{};
+    final styles = _buildBlockStyle(block);
 
-    // Build style attribute
-    final styleAttr = _buildBlockStyle(block);
-    if (styleAttr.isNotEmpty) {
-      buffer.write('<$tag style="$styleAttr">');
-    } else {
-      buffer.write('<$tag>');
-    }
-
-    // Serialize inline spans
+    // Serialize inline spans first to get the content
+    final contentBuffer = StringBuffer();
     for (final span in block.spans) {
-      _serializeSpan(span, buffer);
+      _serializeSpan(span, contentBuffer);
     }
 
-    buffer.write('</$tag>');
+    // Wrap the block tag
+    buffer.write(_wrapTag(
+      SmartTagType.block,
+      tag,
+      attributes,
+      styles,
+      contentBuffer.toString(),
+    ));
   }
 
-  /// Builds the CSS style string for a block
-  String _buildBlockStyle(BlockNode block) {
-    final styles = <String>[];
-    if (block.alignment != SmartTextAlign.left) {
-      styles.add('text-align: ${_alignToCSS(block.alignment)}');
+  /// Helper to wrap content in a tag, allowing for external interception.
+  String _wrapTag(
+    SmartTagType type,
+    String tag,
+    Map<String, String> attributes,
+    Map<String, String> styles,
+    String content,
+  ) {
+    // Check for custom interceptor
+    final custom = onTagSerialize?.call(type, tag, attributes, styles, content);
+    if (custom != null) return custom;
+
+    // Default serialization: Merge styles into attributes if not handled by callback
+    if (styles.isNotEmpty) {
+      final styleString = styles.entries.map((e) => '${e.key}: ${e.value}').join('; ');
+      attributes['style'] = styleString;
     }
-    return styles.join('; ');
+
+    final attrString = attributes.entries
+        .map((e) => ' ${e.key}="${_escapeAttr(e.value)}"')
+        .join('');
+    return '<$tag$attrString>$content</$tag>';
+  }
+
+  /// Builds the CSS style map for a block
+  Map<String, String> _buildBlockStyle(BlockNode block) {
+    final styles = <String, String>{};
+    if (block.alignment != SmartTextAlign.left) {
+      styles['text-align'] = _alignToCSS(block.alignment);
+    }
+    return styles;
   }
 
   /// Converts a [SmartTextAlign] to a CSS value
@@ -63,72 +99,65 @@ class SmartHtmlSerializer {
   void _serializeSpan(TextFormatSpan span, StringBuffer buffer) {
     if (span.text.isEmpty) return;
 
-    final openTags = <String>[];
-    final closeTags = <String>[];
+    String content = _escapeHtml(span.text);
 
-    // Link wrapping (outermost)
-    if (span.linkUrl != null && span.linkUrl!.isNotEmpty) {
-      openTags.add('<a href="${_escapeAttr(span.linkUrl!)}">');
-      closeTags.insert(0, '</a>');
-    }
-
-    // Bold
-    if (span.isBold) {
-      openTags.add('<b>');
-      closeTags.insert(0, '</b>');
-    }
-
-    // Italic
-    if (span.isItalic) {
-      openTags.add('<i>');
-      closeTags.insert(0, '</i>');
-    }
-
-    // Underline
-    if (span.isUnderline) {
-      openTags.add('<u>');
-      closeTags.insert(0, '</u>');
-    }
-
-    // Strikethrough
-    if (span.isStrikethrough) {
-      openTags.add('<s>');
-      closeTags.insert(0, '</s>');
-    }
-
-    // Colors and Fonts (Span with style)
-    final inlineStyles = <String>[];
+    // 1. Generic Span (Colors, Fonts) - Innermost
+    final inlineStyles = <String, String>{};
     if (span.foregroundColor != null) {
-      inlineStyles.add('color: #${_colorToHex(span.foregroundColor!)}');
+      inlineStyles['color'] = '#${_colorToHex(span.foregroundColor!)}';
     }
     if (span.backgroundColor != null) {
-      inlineStyles
-          .add('background-color: #${_colorToHex(span.backgroundColor!)}');
+      inlineStyles['background-color'] = '#${_colorToHex(span.backgroundColor!)}';
     }
     if (span.fontSize != null) {
-      inlineStyles.add('font-size: ${span.fontSize}px');
+      inlineStyles['font-size'] = '${span.fontSize}px';
     }
     if (span.fontFamily != null) {
-      inlineStyles.add('font-family: ${span.fontFamily}');
+      inlineStyles['font-family'] = span.fontFamily!;
     }
 
     if (inlineStyles.isNotEmpty) {
-      openTags.add('<span style="${inlineStyles.join('; ')}">');
-      closeTags.insert(0, '</span>');
+      content = _wrapTag(
+        SmartTagType.span,
+        'span',
+        {},
+        inlineStyles,
+        content,
+      );
     }
 
-    // Write opening tags
-    for (final tag in openTags) {
-      buffer.write(tag);
+    // 2. Strikethrough
+    if (span.isStrikethrough) {
+      content = _wrapTag(SmartTagType.strikethrough, 's', {}, {}, content);
     }
 
-    // Write text (escaped)
-    buffer.write(_escapeHtml(span.text));
-
-    // Write closing tags
-    for (final tag in closeTags) {
-      buffer.write(tag);
+    // 3. Underline
+    if (span.isUnderline) {
+      content = _wrapTag(SmartTagType.underline, 'u', {}, {}, content);
     }
+
+    // 4. Italic
+    if (span.isItalic) {
+      content = _wrapTag(SmartTagType.italic, 'i', {}, {}, content);
+    }
+
+    // 5. Bold
+    if (span.isBold) {
+      content = _wrapTag(SmartTagType.bold, 'b', {}, {}, content);
+    }
+
+    // 6. Link wrapping (outermost)
+    if (span.linkUrl != null && span.linkUrl!.isNotEmpty) {
+      content = _wrapTag(
+        SmartTagType.link,
+        'a',
+        {'href': span.linkUrl!},
+        {},
+        content,
+      );
+    }
+
+    buffer.write(content);
   }
 
   /// Converts a Color to a hex string (RRGGBB)

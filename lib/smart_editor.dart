@@ -80,6 +80,17 @@ class _SmartEditorState extends State<SmartEditor> {
         widget.controller.attachToolbar(_toolbarKey.currentState!);
       }
     });
+
+    widget.controller.onTagSerialize = widget.editorSettings.onTagSerialize;
+  }
+
+  @override
+  void didUpdateWidget(SmartEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.editorSettings.onTagSerialize !=
+        oldWidget.editorSettings.onTagSerialize) {
+      widget.controller.onTagSerialize = widget.editorSettings.onTagSerialize;
+    }
   }
 
   /// Determines if dark mode is active
