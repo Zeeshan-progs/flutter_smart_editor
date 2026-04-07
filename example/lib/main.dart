@@ -58,11 +58,32 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
             // ─── The Editor ─────────────────────────────────────
             SmartEditor(
               controller: controller,
-              editorSettings: const SmartEditorSettings(
+              editorSettings: SmartEditorSettings(
+                maxLines: 9,
                 hint: 'Start typing here...',
                 initialText: '<p>Welcome to <b>Flutter Smart Editor</b>!</p>'
                     '<h2>A Pure Flutter Editor</h2>'
                     '<p>No WebView. No JavaScript. Just <i>Dart and Flutter</i>.</p>',
+                // Style & Layout
+                editorPadding: const EdgeInsets.all(16),
+                borderRadius: const BorderRadius.all(Radius.circular(12)),
+                autoAdjustHeight: true,
+                cursorWidth: 2.0,
+                // Callbacks
+                onInit: () {
+                  developer.log('Editor initialized!', name: 'SmartEditor');
+                },
+                onChangeContent: (html) {
+                  final prettyHtml = (html ?? '').replaceAll('><', '>\n<');
+                  developer.log('Content changed:\n$prettyHtml',
+                      name: 'SmartEditor');
+                },
+                onFocus: () {
+                  developer.log('Editor focused', name: 'SmartEditor');
+                },
+                onBlur: () {
+                  developer.log('Editor blurred', name: 'SmartEditor');
+                },
               ),
               toolbarSettings: const SmartToolbarSettings(
                 toolbarPosition: SmartToolbarPosition.above,
@@ -75,10 +96,13 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
                     italic: true,
                     underline: true,
                     strikethrough: true,
-                    clearAll: false,
-                    superscript: false,
-                    subscript: false,
+                    clearAll: true,
                   ),
+                  SmartColorButtons(
+                      foregroundColor: true, highlightColor: true),
+                  SmartFontFamilyButtons(),
+                  SmartFontSizeButtons(),
+                  SmartParagraphButtons(),
                   SmartOtherButtons(
                     undo: true,
                     redo: true,
@@ -89,35 +113,6 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
                     paste: false,
                   ),
                 ],
-              ),
-              scrollSettings: const SmartScrollSettings(
-                autoAdjustHeight: true,
-                maxHeight: 140,
-              ),
-              selectionSettings: const SmartSelectionSettings(
-                cursorWidth: 2.0,
-              ),
-              styleSettings: SmartStyleSettings(
-                height: 400,
-                editorPadding: const EdgeInsets.all(16),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              callbacks: SmartEditorCallbacks(
-                onInit: () {
-                  developer.log('Editor initialized!', name: 'SmartEditor');
-                },
-                onChangeContent: (html) {
-                  // Pretty print the HTML tags for the logger
-                  final prettyHtml = (html ?? '').replaceAll('><', '>\n<');
-                  developer.log('Content changed:\n$prettyHtml',
-                      name: 'SmartEditor');
-                },
-                onFocus: () {
-                  developer.log('Editor focused', name: 'SmartEditor');
-                },
-                onBlur: () {
-                  developer.log('Editor blurred', name: 'SmartEditor');
-                },
               ),
             ),
 

@@ -151,4 +151,89 @@ void main() {
       expect(result, original);
     });
   });
+
+  group('SmartHtmlSerializer - Interception', () {
+    test('intercepts and replaces tags', () {
+      final customSerializer = SmartHtmlSerializer(
+        onTagSerialize: (type, tag, attributes, styles, content) {
+          if (type == SmartTagType.bold) {
+            return '<strong>$content</strong>';
+          }
+          return null;
+        },
+      );
+
+      final doc = Document(blocks: [
+        ParagraphNode(spans: [
+          TextFormatSpan.plain('Hello '),
+          TextFormatSpan(text: 'World', isBold: true),
+        ]),
+      ]);
+
+      final html = customSerializer.serialize(doc);
+      expect(html, '<p>Hello <strong>World</strong></p>');
+    });
+
+    test('modifies styles map for a tag', () {
+      final customSerializer = SmartHtmlSerializer(
+        onTagSerialize: (type, tag, attributes, styles, content) {
+          if (type == SmartTagType.bold) {
+            styles['color'] = 'blue';
+            return null; // Return null to use the modified styles map
+          }
+          return null;
+        },
+      );
+
+      final doc = Document(blocks: [
+        ParagraphNode(spans: [
+          TextFormatSpan(text: 'BlueBold', isBold: true),
+        ]),
+      ]);
+
+      final html = customSerializer.serialize(doc);
+      expect(html, '<p><b style="color: blue">BlueBold</b></p>');
+    });
+
+    test('intercepts and replaces block tags', () {
+      final customSerializer = SmartHtmlSerializer(
+        onTagSerialize: (type, tag, attributes, styles, content) {
+          if (type == SmartTagType.block && tag == 'p') {
+            return '<div class="para">$content</div>';
+          }
+          return null;
+        },
+      );
+
+      final doc = Document(blocks: [
+        ParagraphNode(spans: [TextFormatSpan.plain('Paragraph text')]),
+      ]);
+
+      final html = customSerializer.serialize(doc);
+      expect(html, '<div class="para">Paragraph text</div>');
+    });
+
+    test('intercepts nested tags properly', () {
+      final customSerializer = SmartHtmlSerializer(
+        onTagSerialize: (type, tag, attributes, styles, content) {
+          if (type == SmartTagType.bold) {
+            return '<strong class="b">$content</strong>';
+          }
+          if (type == SmartTagType.italic) {
+            return '<em class="i">$content</em>';
+          }
+          return null;
+        },
+      );
+
+      final doc = Document(blocks: [
+        ParagraphNode(spans: [
+          TextFormatSpan(text: 'Nested', isBold: true, isItalic: true),
+        ]),
+      ]);
+
+      final html = customSerializer.serialize(doc);
+      expect(html, '<p><strong class="b"><em class="i">Nested</em></strong></p>');
+    });
+  });
 }

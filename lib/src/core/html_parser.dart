@@ -1,5 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
+import 'package:flutter/painting.dart';
 import '../core/document.dart';
 import '../models/enums.dart';
 
@@ -143,9 +144,11 @@ class SmartHtmlParser {
           isItalic: parentFormat.isItalic,
           isUnderline: parentFormat.isUnderline,
           isStrikethrough: parentFormat.isStrikethrough,
-          isSuperscript: parentFormat.isSuperscript,
-          isSubscript: parentFormat.isSubscript,
           linkUrl: parentFormat.linkUrl,
+          fontSize: parentFormat.fontSize,
+          fontFamily: parentFormat.fontFamily,
+          foregroundColor: parentFormat.foregroundColor,
+          backgroundColor: parentFormat.backgroundColor,
         ));
       }
       return;
@@ -156,6 +159,12 @@ class SmartHtmlParser {
     final element = node;
     final tag = element.localName?.toLowerCase() ?? '';
     final childFormat = parentFormat.copyWith();
+
+    // Parse style attribute if present
+    final style = element.attributes['style'] ?? '';
+    if (style.isNotEmpty) {
+      _parseInlineStyle(style, childFormat);
+    }
 
     // Apply formatting based on tag
     switch (tag) {
@@ -176,12 +185,6 @@ class SmartHtmlParser {
       case 'del':
         childFormat.isStrikethrough = true;
         break;
-      case 'sup':
-        childFormat.isSuperscript = true;
-        break;
-      case 'sub':
-        childFormat.isSubscript = true;
-        break;
       case 'a':
         childFormat.linkUrl = element.attributes['href'];
         break;
@@ -195,6 +198,65 @@ class SmartHtmlParser {
       _extractInlineSpans(child, spans, childFormat);
     }
   }
+
+  /// Parses inline CSS styles into the format object
+  void _parseInlineStyle(String style, _InlineFormat format) {
+    final declarations = style.split(';');
+    for (var decl in declarations) {
+      if (!decl.contains(':')) continue;
+      final parts = decl.split(':');
+      final key = parts[0].trim().toLowerCase();
+      final value = parts[1].trim().toLowerCase();
+
+      switch (key) {
+        case 'color':
+          format.foregroundColor = _parseColor(value);
+          break;
+        case 'background-color':
+          format.backgroundColor = _parseColor(value);
+          break;
+        case 'font-size':
+          format.fontSize = _parseFontSize(value);
+          break;
+        case 'font-family':
+          format.fontFamily = parts[1].trim(); // preserve case for fonts
+          break;
+      }
+    }
+  }
+
+  Color? _parseColor(String value) {
+    if (value.startsWith('#')) {
+      // Hex
+      var hex = value.replaceFirst('#', '');
+      if (hex.length == 3) {
+        hex = hex[0] * 2 + hex[1] * 2 + hex[2] * 2;
+      }
+      if (hex.length == 6) {
+        hex = 'ff$hex';
+      }
+      return Color(int.parse(hex, radix: 16));
+    } else if (value.startsWith('rgb')) {
+      // rgb(r, g, b)
+      final match = RegExp(r'rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)')
+          .firstMatch(value);
+      if (match != null) {
+        return Color.fromARGB(
+          255,
+          int.parse(match.group(1)!),
+          int.parse(match.group(2)!),
+          int.parse(match.group(3)!),
+        );
+      }
+    }
+    return null;
+  }
+
+  double? _parseFontSize(String value) {
+    // Handles px, pt, or raw numeric (defaulting to double)
+    final cleaned = value.replaceAll(RegExp(r'[a-z]'), '').trim();
+    return double.tryParse(cleaned);
+  }
 }
 
 /// Tracks the current inline format state during recursive parsing
@@ -203,18 +265,22 @@ class _InlineFormat {
   bool isItalic;
   bool isUnderline;
   bool isStrikethrough;
-  bool isSuperscript;
-  bool isSubscript;
   String? linkUrl;
+  double? fontSize;
+  String? fontFamily;
+  Color? foregroundColor;
+  Color? backgroundColor;
 
   _InlineFormat({
     this.isBold = false,
     this.isItalic = false,
     this.isUnderline = false,
     this.isStrikethrough = false,
-    this.isSuperscript = false,
-    this.isSubscript = false,
     this.linkUrl,
+    this.fontSize,
+    this.fontFamily,
+    this.foregroundColor,
+    this.backgroundColor,
   });
 
   _InlineFormat copyWith() => _InlineFormat(
@@ -222,8 +288,10 @@ class _InlineFormat {
         isItalic: isItalic,
         isUnderline: isUnderline,
         isStrikethrough: isStrikethrough,
-        isSuperscript: isSuperscript,
-        isSubscript: isSubscript,
         linkUrl: linkUrl,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        foregroundColor: foregroundColor,
+        backgroundColor: backgroundColor,
       );
 }

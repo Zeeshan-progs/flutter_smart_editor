@@ -44,6 +44,14 @@ class SmartEditorController extends ChangeNotifier {
   final UndoRedoManager _undoRedoManager = UndoRedoManager();
   late final DocumentController _documentController;
 
+  /// Custom tag serialization callback.
+  String? Function(
+      SmartTagType type,
+      String tag,
+      Map<String, String> attributes,
+      Map<String, String> styles,
+      String content)? onTagSerialize;
+
   /// Internal references set by the widget
   SmartEditorWidgetState? _editorWidgetState;
   SmartToolbarState? _toolbarState;
@@ -74,6 +82,7 @@ class SmartEditorController extends ChangeNotifier {
 
   /// Gets the HTML content from the editor.
   Future<String> getText() async {
+    _serializer.onTagSerialize = onTagSerialize;
     var html = _serializer.serialize(_documentController.document);
 
     if (processOutputHtml) {

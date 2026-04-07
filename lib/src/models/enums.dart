@@ -114,3 +114,27 @@ enum SmartDropdownMenuDirection {
   down,
   up,
 }
+
+/// Identifies the type of HTML element being serialized.
+enum SmartTagType {
+  /// A block-level element (e.g. p, h1-h6)
+  block,
+
+  /// A bold text span (<b>)
+  bold,
+
+  /// An italic text span (<i>)
+  italic,
+
+  /// An underline text span (<u>)
+  underline,
+
+  /// A strikethrough text span (<s>)
+  strikethrough,
+
+  /// A hyperlink (<a>)
+  link,
+
+  /// A generic style span (<span>) for colors, fonts, etc.
+  span,
+}

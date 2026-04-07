@@ -3,11 +3,6 @@ import 'smart_editor_controller.dart';
 import 'src/core/html_parser.dart';
 import 'src/models/editor_settings.dart';
 import 'src/models/toolbar_settings.dart';
-import 'src/models/scroll_settings.dart';
-import 'src/models/keyboard_settings.dart';
-import 'src/models/selection_settings.dart';
-import 'src/models/style_settings.dart';
-import 'src/models/callbacks.dart';
 import 'src/models/enums.dart';
 import 'src/widgets/smart_editor_widget.dart';
 import 'src/widgets/smart_toolbar_widget.dart';
@@ -38,36 +33,16 @@ class SmartEditor extends StatefulWidget {
     required this.controller,
     this.editorSettings = const SmartEditorSettings(),
     this.toolbarSettings = const SmartToolbarSettings(),
-    this.scrollSettings = const SmartScrollSettings(),
-    this.keyboardSettings = const SmartKeyboardSettings(),
-    this.selectionSettings = const SmartSelectionSettings(),
-    this.styleSettings = const SmartStyleSettings(),
-    this.callbacks = const SmartEditorCallbacks(),
   });
 
   /// The controller for this editor instance.
   final SmartEditorController controller;
 
-  /// Core editor behavior settings.
+  /// Comprehensive editor behavior, style, and event settings.
   final SmartEditorSettings editorSettings;
 
   /// Toolbar appearance and behavior settings.
   final SmartToolbarSettings toolbarSettings;
-
-  /// Scroll behavior settings.
-  final SmartScrollSettings scrollSettings;
-
-  /// Keyboard configuration settings.
-  final SmartKeyboardSettings keyboardSettings;
-
-  /// Selection and cursor appearance settings.
-  final SmartSelectionSettings selectionSettings;
-
-  /// Visual appearance settings.
-  final SmartStyleSettings styleSettings;
-
-  /// Event callbacks.
-  final SmartEditorCallbacks callbacks;
 
   @override
   State<SmartEditor> createState() => _SmartEditorState();
@@ -105,6 +80,17 @@ class _SmartEditorState extends State<SmartEditor> {
         widget.controller.attachToolbar(_toolbarKey.currentState!);
       }
     });
+
+    widget.controller.onTagSerialize = widget.editorSettings.onTagSerialize;
+  }
+
+  @override
+  void didUpdateWidget(SmartEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.editorSettings.onTagSerialize !=
+        oldWidget.editorSettings.onTagSerialize) {
+      widget.controller.onTagSerialize = widget.editorSettings.onTagSerialize;
+    }
   }
 
   /// Determines if dark mode is active
@@ -120,21 +106,27 @@ class _SmartEditorState extends State<SmartEditor> {
   }
 
   /// Called when format state changes in the editor
-  void _onFormatStateChanged(int blockIndex, Map<String, bool> formats) {
+  void _onFormatStateChanged(int blockIndex, Map<String, dynamic> formats) {
     _toolbarKey.currentState?.updateFormatState(blockIndex, formats);
   }
 
   /// Called when the toolbar toggles a format at cursor (no selection).
   /// Sets the pending format so the next typed character gets that format.
-  void _onPendingFormatChanged(Map<String, bool> formats) {
+  void _onPendingFormatChanged(Map<String, dynamic> formats) {
     _editorKey.currentState?.setPendingFormat(formats);
+  }
+
+  /// Called when toolbar wants focus back on the editor
+  void _onFocusRequested() {
+    _editorKey.currentState?.rebuild(); // Trigger any needed UI sync
+    _editorKey.currentState?.requestEditorFocus();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = _isDarkMode();
     final defaultDecoration = BoxDecoration(
-      borderRadius: widget.styleSettings.borderRadius ??
+      borderRadius: widget.editorSettings.borderRadius ??
           const BorderRadius.all(Radius.circular(8)),
       border: Border.all(
         color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
@@ -153,20 +145,37 @@ class _SmartEditorState extends State<SmartEditor> {
                 getSelection: () => _editorKey.currentState?.selection,
                 onFormatApplied: _onFormatApplied,
                 onPendingFormatChanged: _onPendingFormatChanged,
+                onFocusRequested: _onFocusRequested,
                 isDarkMode: isDark,
               )
             : null;
 
-    final editorWidget = Expanded(
+    final double fontSize = widget.editorSettings.defaultFontSize;
+    final double lineHeight =
+        fontSize * 1.3; // Allow a bit more for strut/padding
+    final double verticalPadding = widget.editorSettings.editorPadding.vertical;
+
+    final bool hasToolbar =
+        widget.toolbarSettings.toolbarPosition != SmartToolbarPosition.custom;
+    final double toolbarHeight =
+        hasToolbar ? widget.toolbarSettings.itemHeight + 12 : 0;
+
+    final double effectiveMinHeight =
+        (1 * lineHeight) + verticalPadding + toolbarHeight;
+
+    double? effectiveMaxHeight;
+    if (widget.editorSettings.maxLines != null) {
+      effectiveMaxHeight = (widget.editorSettings.maxLines! * lineHeight) +
+          verticalPadding +
+          toolbarHeight;
+    }
+
+    final editorWidget = Flexible(
+      fit: FlexFit.loose,
       child: SmartEditorWidget(
         key: _editorKey,
         documentController: widget.controller.documentController,
         editorSettings: widget.editorSettings,
-        scrollSettings: widget.scrollSettings,
-        keyboardSettings: widget.keyboardSettings,
-        selectionSettings: widget.selectionSettings,
-        styleSettings: widget.styleSettings,
-        callbacks: widget.callbacks,
         onFormatStateChanged: _onFormatStateChanged,
       ),
     );
@@ -174,6 +183,8 @@ class _SmartEditorState extends State<SmartEditor> {
     Widget content;
     if (widget.toolbarSettings.toolbarPosition == SmartToolbarPosition.above) {
       content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (toolbarWidget != null) toolbarWidget,
           editorWidget,
@@ -182,6 +193,8 @@ class _SmartEditorState extends State<SmartEditor> {
     } else if (widget.toolbarSettings.toolbarPosition ==
         SmartToolbarPosition.below) {
       content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           editorWidget,
           if (toolbarWidget != null) toolbarWidget,
@@ -189,12 +202,19 @@ class _SmartEditorState extends State<SmartEditor> {
       );
     } else {
       // Custom position — no toolbar in this widget
-      content = Column(children: [editorWidget]);
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [editorWidget],
+      );
     }
 
     return Container(
-      height: widget.styleSettings.height,
-      decoration: widget.styleSettings.decoration ?? defaultDecoration,
+      constraints: BoxConstraints(
+        minHeight: effectiveMinHeight,
+        maxHeight: effectiveMaxHeight ?? double.infinity,
+      ),
+      decoration: widget.editorSettings.decoration ?? defaultDecoration,
       clipBehavior: Clip.antiAlias,
       child: content,
     );

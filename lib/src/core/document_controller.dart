@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import '../core/document.dart';
 import '../core/undo_redo_manager.dart';
 import '../models/enums.dart';
@@ -33,27 +33,10 @@ class DocumentController {
 
   // ─── Text Operations ──────────────────────────────────────────
 
-  /// Inserts plain text into a block at the given offset, inheriting
-  /// the existing span's formatting at that position.
-  void insertText(int blockIndex, int offset, String text) {
-    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
-    _saveState();
-
-    final block = document.blocks[blockIndex];
-    final loc = block.getSpanAt(offset);
-    final span = block.spans[loc.spanIndex];
-
-    span.text = span.text.substring(0, loc.localOffset) +
-        text +
-        span.text.substring(loc.localOffset);
-
-    _notifyChanged();
-  }
-
-  /// Inserts text with specific formatting at the given offset.
-  /// Used for "pending format" — when user toggles Bold at cursor,
-  /// then types, the new text should be bold.
-  void insertFormattedText(
+  /// Inserts text into a block at the given offset.
+  /// If formatting parameters are provided, it creates a new span.
+  /// Otherwise, it inherits formatting from the existing span at that position.
+  void insertText(
     int blockIndex,
     int offset,
     String text, {
@@ -61,37 +44,52 @@ class DocumentController {
     bool isItalic = false,
     bool isUnderline = false,
     bool isStrikethrough = false,
+    String? fontFamily,
+    double? fontSize,
+    Color? foregroundColor,
+    Color? backgroundColor,
+    bool usePendingFormat = false,
   }) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     _saveState();
 
     final block = document.blocks[blockIndex];
 
-    // Create a new span with the requested formatting
-    final newSpan = TextFormatSpan(
-      text: text,
-      isBold: isBold,
-      isItalic: isItalic,
-      isUnderline: isUnderline,
-      isStrikethrough: isStrikethrough,
-    );
+    if (usePendingFormat) {
+      // Create a new span with the requested formatting
+      final newSpan = TextFormatSpan(
+        text: text,
+        isBold: isBold,
+        isItalic: isItalic,
+        isUnderline: isUnderline,
+        isStrikethrough: isStrikethrough,
+        fontFamily: fontFamily,
+        fontSize: fontSize,
+        foregroundColor: foregroundColor,
+        backgroundColor: backgroundColor,
+      );
 
-    // Split the span at the offset and insert the new formatted span
-    _splitSpanAt(block, offset);
+      _splitSpanAt(block, offset);
 
-    // Find which span index to insert at
-    var currentOffset = 0;
-    var insertIndex = 0;
-    for (var i = 0; i < block.spans.length; i++) {
-      if (currentOffset >= offset) {
-        insertIndex = i;
-        break;
+      var currentOffset = 0;
+      var insertIndex = 0;
+      for (var i = 0; i < block.spans.length; i++) {
+        if (currentOffset >= offset) {
+          insertIndex = i;
+          break;
+        }
+        currentOffset += block.spans[i].text.length;
+        insertIndex = i + 1;
       }
-      currentOffset += block.spans[i].text.length;
-      insertIndex = i + 1;
+      block.spans.insert(insertIndex, newSpan);
+    } else {
+      // Inherit formatting
+      final loc = block.getSpanAt(offset);
+      final span = block.spans[loc.spanIndex];
+      span.text = span.text.substring(0, loc.localOffset) +
+          text +
+          span.text.substring(loc.localOffset);
     }
-
-    block.spans.insert(insertIndex, newSpan);
 
     _notifyChanged();
   }
@@ -103,26 +101,7 @@ class DocumentController {
     _saveState();
 
     final block = document.blocks[blockIndex];
-    var remaining = length;
-    var deleteStart = start;
-
-    while (remaining > 0 && block.spans.isNotEmpty) {
-      final loc = block.getSpanAt(deleteStart);
-      final span = block.spans[loc.spanIndex];
-      final availableToDelete = span.text.length - loc.localOffset;
-      final toDelete =
-          remaining < availableToDelete ? remaining : availableToDelete;
-
-      span.text = span.text.substring(0, loc.localOffset) +
-          span.text.substring(loc.localOffset + toDelete);
-
-      remaining -= toDelete;
-
-      // Remove empty spans (but keep at least one)
-      if (span.text.isEmpty && block.spans.length > 1) {
-        block.spans.removeAt(loc.spanIndex);
-      }
-    }
+    _deleteFromSpans(block, start, length);
 
     _notifyChanged();
   }
@@ -171,8 +150,7 @@ class DocumentController {
       return;
     }
 
-    // Complex paste: multiple blocks, or a single heading block
-    // 1. Split current block at the offset
+    // Complex paste: multiple blocks
     splitBlock(blockIndex, offset);
 
     final leftBlock = document.blocks[blockIndex];
@@ -208,10 +186,6 @@ class DocumentController {
   }
 
   /// Smart text update that preserves formatting.
-  ///
-  /// Compares [oldText] with [newText], determines the minimal diff
-  /// (insertions/deletions), and updates spans accordingly without
-  /// destroying existing formatting.
   void updateBlockText(
     int blockIndex,
     String oldText,
@@ -246,28 +220,19 @@ class DocumentController {
     );
 
     final block = document.blocks[blockIndex];
-
-    // Save state for undo (but debounce — don't save on every keystroke)
-    // Only save if this is the first change or after a pause
     _saveState();
 
-    // Step 1: Delete the removed characters
+    // Step 1: Delete
     if (deleteLength > 0) {
       _deleteFromSpans(block, deleteStart, deleteLength);
     }
 
-    // Step 2: Insert the new characters
+    // Step 2: Insert
     if (insertedText.isNotEmpty) {
       if (pendingFormat != null) {
-        // Insert with specific formatting (pending format from toolbar)
         _insertFormattedIntoSpans(
-          block,
-          deleteStart,
-          insertedText,
-          pendingFormat,
-        );
+            block, deleteStart, insertedText, pendingFormat);
       } else {
-        // Inherit formatting from the position
         _insertIntoSpans(block, deleteStart, insertedText);
       }
     }
@@ -275,7 +240,6 @@ class DocumentController {
     _notifyChanged();
   }
 
-  /// Internal: Deletes [length] characters starting at [offset] from block spans
   void _deleteFromSpans(BlockNode block, int offset, int length) {
     var remaining = length;
     var deleteStart = offset;
@@ -294,14 +258,12 @@ class DocumentController {
 
       remaining -= toDelete;
 
-      // Remove empty spans (but keep at least one)
       if (span.text.isEmpty && block.spans.length > 1) {
         block.spans.removeAt(loc.spanIndex);
       }
     }
   }
 
-  /// Internal: Inserts [text] at [offset] inheriting the span's format at that position
   void _insertIntoSpans(BlockNode block, int offset, String text) {
     if (block.spans.isEmpty) {
       block.spans.add(TextFormatSpan(text: text));
@@ -316,17 +278,14 @@ class DocumentController {
         span.text.substring(loc.localOffset);
   }
 
-  /// Internal: Inserts [text] at [offset] with specific [format]
   void _insertFormattedIntoSpans(
     BlockNode block,
     int offset,
     String text,
     TextFormatSpan format,
   ) {
-    // Split at the offset
     _splitSpanAt(block, offset);
 
-    // Find the insert position
     var currentOffset = 0;
     var insertIndex = 0;
     for (var i = 0; i < block.spans.length; i++) {
@@ -338,63 +297,66 @@ class DocumentController {
       insertIndex = i + 1;
     }
 
-    // Create new span with the pending format
     final newSpan = format.copyWith(text: text);
     block.spans.insert(insertIndex, newSpan);
   }
 
-  /// Replaces the entire content of a block with new text,
-  /// preserving the formatting of the first span.
-  /// @deprecated Use [updateBlockText] instead for format-preserving updates.
-  void replaceBlockText(int blockIndex, String newText) {
-    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
-    _saveState();
-
-    final block = document.blocks[blockIndex];
-    final format =
-        block.spans.isNotEmpty ? block.spans.first : TextFormatSpan.plain('');
-    block.spans = [format.copyWith(text: newText)];
-
-    _notifyChanged();
-  }
-
   // ─── Formatting Operations ────────────────────────────────────
 
-  /// Toggles a formatting property on a text range within a block.
-  ///
-  /// [format] is one of: 'bold', 'italic', 'underline', 'strikethrough'
   void toggleFormat(int blockIndex, int start, int end, String format) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     if (start >= end) return;
     _saveState();
 
     final block = document.blocks[blockIndex];
-
-    // First, split spans at the boundaries
     _splitSpanAt(block, start);
     _splitSpanAt(block, end);
 
-    // Determine if the format is currently active across the entire range
-    final isActive = _isFormatActive(block, start, end, format);
-
-    // Apply or remove the format across the range
+    bool isActive = false;
     var offset = 0;
     for (final span in block.spans) {
       final spanEnd = offset + span.text.length;
+      if (offset >= start && spanEnd <= end && span.text.isNotEmpty) {
+        isActive = _getFormat(span, format) == true;
+        break;
+      }
+      offset = spanEnd;
+    }
 
-      // Check if this span overlaps with [start, end)
+    offset = 0;
+    for (final span in block.spans) {
+      final spanEnd = offset + span.text.length;
       if (offset >= start && spanEnd <= end) {
         _setFormat(span, format, !isActive);
       }
-
       offset = spanEnd;
     }
 
     _notifyChanged();
   }
 
-  /// Returns the formatting state at a specific offset in a block
-  Map<String, bool> getFormatAt(int blockIndex, int offset) {
+  void applyFormat(
+      int blockIndex, int start, int end, String format, dynamic value) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (start >= end) return;
+    _saveState();
+
+    final block = document.blocks[blockIndex];
+    _splitSpanAt(block, start);
+    _splitSpanAt(block, end);
+
+    var offset = 0;
+    for (final span in block.spans) {
+      final spanEnd = offset + span.text.length;
+      if (offset >= start && spanEnd <= end) {
+        _setFormat(span, format, value);
+      }
+      offset = spanEnd;
+    }
+    _notifyChanged();
+  }
+
+  Map<String, dynamic> getFormatAt(int blockIndex, int offset) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) {
       return _defaultFormat();
     }
@@ -412,33 +374,29 @@ class DocumentController {
       'italic': span.isItalic,
       'underline': span.isUnderline,
       'strikethrough': span.isStrikethrough,
+      'fontFamily': span.fontFamily,
+      'fontSize': span.fontSize,
+      'foregroundColor': span.foregroundColor,
+      'backgroundColor': span.backgroundColor,
+      'alignment': block.alignment,
     };
   }
 
-  Map<String, bool> _defaultFormat() => {
+  Map<String, dynamic> _defaultFormat() => {
         'bold': false,
         'italic': false,
         'underline': false,
         'strikethrough': false,
+        'superscript': false,
+        'subscript': false,
+        'fontFamily': null,
+        'fontSize': null,
+        'foregroundColor': null,
+        'backgroundColor': null,
+        'alignment': SmartTextAlign.left,
       };
 
-  /// Checks if a format is active across the entire [start, end) range
-  bool _isFormatActive(BlockNode block, int start, int end, String format) {
-    var offset = 0;
-    for (final span in block.spans) {
-      final spanEnd = offset + span.text.length;
-
-      if (offset >= start && spanEnd <= end && span.text.isNotEmpty) {
-        if (!_getFormat(span, format)) return false;
-      }
-
-      offset = spanEnd;
-    }
-    return true;
-  }
-
-  /// Gets a format value from a span
-  bool _getFormat(TextFormatSpan span, String format) {
+  dynamic _getFormat(TextFormatSpan span, String format) {
     switch (format) {
       case 'bold':
         return span.isBold;
@@ -448,31 +406,48 @@ class DocumentController {
         return span.isUnderline;
       case 'strikethrough':
         return span.isStrikethrough;
+      case 'fontFamily':
+        return span.fontFamily;
+      case 'fontSize':
+        return span.fontSize;
+      case 'foregroundColor':
+        return span.foregroundColor;
+      case 'backgroundColor':
+        return span.backgroundColor;
       default:
-        return false;
+        return null;
     }
   }
 
-  /// Sets a format value on a span
-  void _setFormat(TextFormatSpan span, String format, bool value) {
+  void _setFormat(TextFormatSpan span, String format, dynamic value) {
     switch (format) {
       case 'bold':
-        span.isBold = value;
+        span.isBold = value as bool;
         break;
       case 'italic':
-        span.isItalic = value;
+        span.isItalic = value as bool;
         break;
       case 'underline':
-        span.isUnderline = value;
+        span.isUnderline = value as bool;
         break;
       case 'strikethrough':
-        span.isStrikethrough = value;
+        span.isStrikethrough = value as bool;
+        break;
+      case 'fontFamily':
+        span.fontFamily = value as String?;
+        break;
+      case 'fontSize':
+        span.fontSize = value as double?;
+        break;
+      case 'foregroundColor':
+        span.foregroundColor = value;
+        break;
+      case 'backgroundColor':
+        span.backgroundColor = value;
         break;
     }
   }
 
-  /// Splits the span at the given global offset, creating two spans
-  /// with the same formatting.
   void _splitSpanAt(BlockNode block, int globalOffset) {
     if (globalOffset <= 0 || globalOffset >= block.textLength) return;
 
@@ -490,10 +465,6 @@ class DocumentController {
 
   // ─── Block Operations ─────────────────────────────────────────
 
-  /// Splits a block at the given offset into two blocks.
-  /// Used when the user presses Enter.
-  ///
-  /// Returns the index of the new (second) block.
   int splitBlock(int blockIndex, int offset, {TextFormatSpan? pendingFormat}) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) {
       return blockIndex;
@@ -501,38 +472,26 @@ class DocumentController {
     _saveState();
 
     final block = document.blocks[blockIndex];
-
-    // Collect spans for each half
     final leftSpans = <TextFormatSpan>[];
     final rightSpans = <TextFormatSpan>[];
     var currentOffset = 0;
 
     for (final span in block.spans) {
       final spanEnd = currentOffset + span.text.length;
-
       if (spanEnd <= offset) {
-        // Entirely in the left half
         leftSpans.add(span.copyWith());
       } else if (currentOffset >= offset) {
-        // Entirely in the right half
         rightSpans.add(span.copyWith());
       } else {
-        // Split this span
         final splitPoint = offset - currentOffset;
         leftSpans.add(span.copyWith(text: span.text.substring(0, splitPoint)));
         rightSpans.add(span.copyWith(text: span.text.substring(splitPoint)));
       }
-
       currentOffset = spanEnd;
     }
 
-    // Ensure both halves have at least one span
-    if (leftSpans.isEmpty) {
-      leftSpans.add(TextFormatSpan.plain(''));
-    }
-
+    if (leftSpans.isEmpty) leftSpans.add(TextFormatSpan.plain(''));
     if (rightSpans.isEmpty) {
-      // Inherit the format from the explicit pending format, or last left span
       if (pendingFormat != null) {
         rightSpans.add(pendingFormat.copyWith(text: ''));
       } else if (leftSpans.isNotEmpty) {
@@ -542,21 +501,17 @@ class DocumentController {
       }
     }
 
-    // Update the current block with left spans
     block.spans = leftSpans;
-
-    // Create a new paragraph for the right half (Enter always creates <p>)
-    final newBlock = ParagraphNode(spans: rightSpans);
+    final newBlock = ParagraphNode(
+      spans: rightSpans,
+      alignment: block.alignment,
+    );
     document.blocks.insert(blockIndex + 1, newBlock);
 
     _notifyChanged();
     return blockIndex + 1;
   }
 
-  /// Merges a block with its predecessor.
-  /// Used when the user presses Backspace at the start of a block.
-  ///
-  /// Returns the cursor offset in the merged block (end of the previous block's text).
   int mergeWithPrevious(int blockIndex) {
     if (blockIndex <= 0 || blockIndex >= document.blocks.length) return 0;
     _saveState();
@@ -565,18 +520,14 @@ class DocumentController {
     final current = document.blocks[blockIndex];
     final cursorOffset = previous.textLength;
 
-    // Append current block's spans to the previous block
     previous.spans.addAll(current.spans);
     previous.normalizeSpans();
-
-    // Remove the current block
     document.blocks.removeAt(blockIndex);
 
     _notifyChanged();
     return cursorOffset;
   }
 
-  /// Changes the block type (e.g., paragraph ↔ heading)
   void changeBlockType(int blockIndex, BlockType newType) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     _saveState();
@@ -618,43 +569,89 @@ class DocumentController {
     }
 
     document.blocks[blockIndex] = newBlock;
-
     _notifyChanged();
   }
 
-  // ─── Undo / Redo ──────────────────────────────────────────────
-
-  /// Undoes the last change
-  bool undo() {
-    final previous = undoRedoManager.undo(document);
-    if (previous == null) return false;
-    document = previous;
-    _notifyChanged();
-    return true;
-  }
-
-  /// Redoes the last undone change
-  bool redo() {
-    final next = undoRedoManager.redo(document);
-    if (next == null) return false;
-    document = next;
-    _notifyChanged();
-    return true;
-  }
-
-  // ─── Document Operations ──────────────────────────────────────
-
-  /// Replaces the entire document with a new one
-  void setDocument(Document newDocument) {
+  void setLineHeight(int blockIndex, double? lineHeight) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     _saveState();
-    document = newDocument;
+    document.blocks[blockIndex].lineHeight = lineHeight;
     _notifyChanged();
   }
 
-  /// Clears all content, resetting to a single empty paragraph
+  void setAlignment(int blockIndex, SmartTextAlign alignment) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    _saveState();
+    document.blocks[blockIndex].alignment = alignment;
+    _notifyChanged();
+  }
+
+  void clearFormat(int blockIndex, int offset, int length) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (length <= 0) return;
+    _saveState();
+    final block = document.blocks[blockIndex];
+    final oldSpans = block.spans;
+    final newSpans = <TextFormatSpan>[];
+
+    var currentOffset = 0;
+    for (final span in oldSpans) {
+      final spanEnd = currentOffset + span.text.length;
+      if (spanEnd <= offset || currentOffset >= offset + length) {
+        newSpans.add(span);
+      } else {
+        if (currentOffset < offset) {
+          newSpans.add(span.copyWith(
+              text: span.text.substring(0, offset - currentOffset)));
+        }
+        final startInside = currentOffset < offset ? offset - currentOffset : 0;
+        final endInside = spanEnd > offset + length
+            ? span.text.length - (spanEnd - (offset + length))
+            : span.text.length;
+        if (endInside > startInside) {
+          newSpans.add(TextFormatSpan.plain(
+              span.text.substring(startInside, endInside)));
+        }
+        if (spanEnd > offset + length) {
+          final rightStart = span.text.length - (spanEnd - (offset + length));
+          newSpans.add(span.copyWith(text: span.text.substring(rightStart)));
+        }
+      }
+      currentOffset = spanEnd;
+    }
+    block.spans = newSpans;
+    _notifyChanged();
+  }
+
+  void setDocument(Document newDoc) {
+    _saveState();
+    document = newDoc;
+    _notifyChanged();
+  }
+
   void clear() {
     _saveState();
     document = Document();
     _notifyChanged();
+  }
+
+  void undo() {
+    if (undoRedoManager.canUndo) {
+      final doc = undoRedoManager.undo(document);
+      if (doc != null) {
+        document = doc;
+        onDocumentChanged?.call();
+      }
+    }
+  }
+
+  void redo() {
+    if (undoRedoManager.canRedo) {
+      final doc = undoRedoManager.redo(document);
+      if (doc != null) {
+        document = doc;
+        onDocumentChanged?.call();
+      }
+    }
   }
 }

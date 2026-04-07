@@ -2,26 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/document.dart';
 import '../models/enums.dart';
+import '../models/editor_settings.dart';
 
 // ─── Rich Text Controller ───────────────────────────────────────────────
 
-/// A custom [TextEditingController] that renders inline formatting
-/// (bold, italic, underline, strikethrough) by building a styled
-/// [TextSpan] tree from the block's [TextFormatSpan] list.
 class _RichTextEditingController extends TextEditingController {
   _RichTextEditingController({super.text});
 
-  /// The block's formatted spans — set externally whenever the
-  /// document model changes.
+  void refresh() => notifyListeners();
+
   List<TextFormatSpan> formatSpans = [];
-
-  /// Base font size (determined by block type: heading vs paragraph)
   double baseFontSize = 16.0;
-
-  /// Base font weight (headings are bold)
   FontWeight baseFontWeight = FontWeight.normal;
-
-  /// Default text color
   Color defaultColor = Colors.black;
 
   @override
@@ -30,7 +22,6 @@ class _RichTextEditingController extends TextEditingController {
     TextStyle? style,
     required bool withComposing,
   }) {
-    // If no format spans or text is empty, use default
     if (formatSpans.isEmpty || text.isEmpty) {
       return TextSpan(
         text: text,
@@ -42,14 +33,12 @@ class _RichTextEditingController extends TextEditingController {
       );
     }
 
-    // Build children from format spans
     final children = <TextSpan>[];
     var textOffset = 0;
 
     for (final span in formatSpans) {
       if (textOffset >= text.length) break;
 
-      // Clamp span length to remaining text
       final spanLength = span.text.length.clamp(0, text.length - textOffset);
       if (spanLength <= 0) continue;
 
@@ -63,9 +52,7 @@ class _RichTextEditingController extends TextEditingController {
       textOffset += spanLength;
     }
 
-    // If there's remaining text not covered by spans (can happen during typing)
     if (textOffset < text.length) {
-      // Use the format of the last span for continuation
       final lastSpan =
           formatSpans.isNotEmpty ? formatSpans.last : TextFormatSpan.plain('');
 
@@ -78,7 +65,6 @@ class _RichTextEditingController extends TextEditingController {
     return TextSpan(style: style, children: children);
   }
 
-  /// Builds a TextStyle from a TextFormatSpan
   TextStyle _buildSpanStyle(TextFormatSpan span) {
     final decorations = <TextDecoration>[];
     if (span.isUnderline) decorations.add(TextDecoration.underline);
@@ -92,7 +78,7 @@ class _RichTextEditingController extends TextEditingController {
       decoration: decorations.isEmpty
           ? TextDecoration.none
           : TextDecoration.combine(decorations),
-      fontSize: baseFontSize,
+      fontSize: span.fontSize ?? baseFontSize,
       color: span.foregroundColor ?? defaultColor,
       backgroundColor: span.backgroundColor,
       fontFamily: span.fontFamily,
@@ -102,14 +88,13 @@ class _RichTextEditingController extends TextEditingController {
 
 // ─── Block Widget ───────────────────────────────────────────────────────
 
-/// Renders a single block (paragraph or heading) as an editable text field
-/// with full inline formatting support.
 class BlockWidget extends StatefulWidget {
   const BlockWidget({
     super.key,
     required this.block,
     required this.blockIndex,
     required this.focusNode,
+    required this.editorSettings,
     required this.onTextChanged,
     required this.onEnter,
     required this.onBackspaceAtStart,
@@ -117,19 +102,20 @@ class BlockWidget extends StatefulWidget {
     required this.onFocusChanged,
     required this.onSelectionChanged,
     required this.onPaste,
+    this.pendingFontSize,
     this.readOnly = false,
     this.hint,
-    this.padding = const EdgeInsets.symmetric(vertical: 2),
+    this.isDarkMode = false,
     this.cursorColor,
-    this.cursorWidth = 2.0,
+    this.cursorWidth,
     this.cursorRadius,
     this.selectionColor,
-    this.isDarkMode = false,
   });
 
   final BlockNode block;
   final int blockIndex;
   final FocusNode focusNode;
+  final SmartEditorSettings editorSettings;
   final void Function(int blockIndex, String newText) onTextChanged;
   final void Function(int blockIndex, int offset) onEnter;
   final void Function(int blockIndex) onBackspaceAtStart;
@@ -138,14 +124,15 @@ class BlockWidget extends StatefulWidget {
   final void Function(int blockIndex, int baseOffset, int extentOffset)
       onSelectionChanged;
   final void Function(int blockIndex) onPaste;
+
+  final double? pendingFontSize;
   final bool readOnly;
   final String? hint;
-  final EdgeInsets padding;
+  final bool isDarkMode;
   final Color? cursorColor;
-  final double cursorWidth;
+  final double? cursorWidth;
   final Radius? cursorRadius;
   final Color? selectionColor;
-  final bool isDarkMode;
 
   @override
   State<BlockWidget> createState() => BlockWidgetState();
@@ -168,17 +155,13 @@ class BlockWidgetState extends State<BlockWidget> {
   @override
   void didUpdateWidget(BlockWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // Always sync format spans so styling updates are visible
     _syncFormatSpans();
 
-    // Update text if it changed externally
     final newText = widget.block.plainText;
     if (_textController.text != newText && !_isInternalUpdate) {
       _isInternalUpdate = true;
       final cursorPos = _textController.selection.baseOffset;
       _textController.text = newText;
-      // Try to preserve cursor position
       if (cursorPos <= newText.length) {
         _textController.selection = TextSelection.collapsed(offset: cursorPos);
       }
@@ -186,13 +169,15 @@ class BlockWidgetState extends State<BlockWidget> {
     }
   }
 
-  /// Syncs the format spans from the document model to the controller
   void _syncFormatSpans() {
     final defaultColor = widget.isDarkMode ? Colors.white : Colors.black;
     _textController.formatSpans = List.from(widget.block.spans);
     _textController.baseFontSize = _getFontSize();
     _textController.baseFontWeight = _getFontWeight();
     _textController.defaultColor = defaultColor;
+    _textController.refresh();
+
+    if (mounted) setState(() {});
   }
 
   @override
@@ -202,38 +187,30 @@ class BlockWidgetState extends State<BlockWidget> {
     super.dispose();
   }
 
-  /// Unified listener for both text changes and selection changes
   void _onControllerChanged() {
     if (_isInternalUpdate) return;
 
-    // Check for text changes
     final currentText = _textController.text;
     if (currentText != widget.block.plainText) {
       if (currentText.isEmpty && widget.block.plainText.isEmpty) {
-        // Some soft keyboards emit empty string replacements when backspacing on empty lines
         widget.onBackspaceAtStart(widget.blockIndex);
         return;
       }
 
-      // Intercept soft keyboard newlines (Enter key)
       if (currentText.contains('\n')) {
         final indexOfNewline = currentText.indexOf('\n');
         final cleanedText = currentText.replaceAll('\n', '');
 
-        // Restore the text controller to its previous state momentarily
-        // so that splitBlock splits the original spans, not the \n-mutilated string
         _isInternalUpdate = true;
         _textController.text = widget.block.plainText;
         _textController.selection =
             TextSelection.collapsed(offset: indexOfNewline);
         _isInternalUpdate = false;
 
-        // Apply any predictive text additions that came bundled with the Enter key
         if (cleanedText != widget.block.plainText) {
           widget.onTextChanged(widget.blockIndex, cleanedText);
         }
 
-        // Now trigger the block split at the exact newline position
         widget.onEnter(widget.blockIndex, indexOfNewline);
         return;
       }
@@ -243,7 +220,6 @@ class BlockWidgetState extends State<BlockWidget> {
       _isInternalUpdate = false;
     }
 
-    // Check for selection changes (cursor movement via keyboard arrows, etc.)
     final currentSelection = _textController.selection;
     if (currentSelection != _lastReportedSelection &&
         currentSelection.isValid) {
@@ -256,7 +232,6 @@ class BlockWidgetState extends State<BlockWidget> {
     }
   }
 
-  /// Sets the cursor position from outside
   void setCursorPosition(int offset) {
     final clamped = offset.clamp(0, _textController.text.length);
     _isInternalUpdate = true;
@@ -265,16 +240,10 @@ class BlockWidgetState extends State<BlockWidget> {
     _isInternalUpdate = false;
   }
 
-  /// Gets the current cursor offset
   int get cursorOffset => _textController.selection.baseOffset;
-
-  /// Gets the current selection
   TextSelection get selection => _textController.selection;
-
-  /// Returns the text length
   int get textLength => _textController.text.length;
 
-  /// Sets the text without triggering the change callback
   void setTextSilently(String text, {int? cursorOffset}) {
     _isInternalUpdate = true;
     _textController.text = text;
@@ -285,57 +254,56 @@ class BlockWidgetState extends State<BlockWidget> {
     _isInternalUpdate = false;
   }
 
-  /// Forces a visual refresh of the formatting
   void refreshFormatting() {
     _syncFormatSpans();
-    // Force the controller to rebuild its text span
     setState(() {});
   }
 
-  /// Gets the font size for the current block type
   double _getFontSize() {
+    if (widget.pendingFontSize != null) return widget.pendingFontSize!;
+
+    if (_textController.selection.isCollapsed) {
+      final offset = _textController.selection.baseOffset;
+      final loc = widget.block.getSpanAt(offset);
+      final span = widget.block.spans[loc.spanIndex];
+      if (span.fontSize != null) return span.fontSize!;
+    }
+
     if (widget.block is HeadingNode) {
-      final level = (widget.block as HeadingNode).level;
-      switch (level) {
-        case 1:
-          return 32;
-        case 2:
-          return 28;
-        case 3:
-          return 24;
-        case 4:
-          return 20;
-        case 5:
-          return 18;
-        case 6:
-          return 16;
-        default:
-          return 16;
+      final heading = (widget.block as HeadingNode);
+      switch (heading.level) {
+        case 1: return 32;
+        case 2: return 28;
+        case 3: return 24;
+        case 4: return 20;
+        case 5: return 18;
+        case 6: return 16;
+        default: return widget.editorSettings.defaultFontSize;
       }
     }
-    return 16;
+    return widget.editorSettings.defaultFontSize;
   }
 
-  /// Gets the font weight for the current block type
   FontWeight _getFontWeight() {
-    if (widget.block is HeadingNode) {
-      return FontWeight.bold;
-    }
-    return FontWeight.normal;
+    return (widget.block is HeadingNode) ? FontWeight.bold : FontWeight.normal;
   }
 
-  /// Gets the text alignment for the block
   TextAlign _getTextAlign() {
     switch (widget.block.alignment) {
-      case SmartTextAlign.left:
-        return TextAlign.left;
-      case SmartTextAlign.center:
-        return TextAlign.center;
-      case SmartTextAlign.right:
-        return TextAlign.right;
-      case SmartTextAlign.justify:
-        return TextAlign.justify;
+      case SmartTextAlign.left: return TextAlign.left;
+      case SmartTextAlign.center: return TextAlign.center;
+      case SmartTextAlign.right: return TextAlign.right;
+      case SmartTextAlign.justify: return TextAlign.justify;
     }
+  }
+
+  TextStyle _getTextStyle(double defaultFontSize, Color defaultColor) {
+    return TextStyle(
+      fontSize: _getFontSize(),
+      fontWeight: _getFontWeight(),
+      height: 1.2,
+      color: defaultColor,
+    );
   }
 
   @override
@@ -343,49 +311,54 @@ class BlockWidgetState extends State<BlockWidget> {
     final defaultColor = widget.isDarkMode ? Colors.white : Colors.black;
     final hintColor = widget.isDarkMode ? Colors.grey[600] : Colors.grey[400];
 
-    return Padding(
-      padding: widget.padding,
-      child: Focus(
-        onFocusChange: (hasFocus) {
-          widget.onFocusChanged(widget.blockIndex, hasFocus);
-        },
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent) {
-            final isCmdPressed = HardwareKeyboard.instance.isMetaPressed;
-            final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
-            if ((isCmdPressed || isCtrlPressed) &&
-                event.logicalKey == LogicalKeyboardKey.keyV) {
-              widget.onPaste(widget.blockIndex);
-              return KeyEventResult.handled;
+    return Focus(
+      onFocusChange: (hasFocus) {
+        widget.onFocusChanged(widget.blockIndex, hasFocus);
+      },
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          final isCmdPressed = HardwareKeyboard.instance.isMetaPressed;
+          final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
+          if ((isCmdPressed || isCtrlPressed) &&
+              event.logicalKey == LogicalKeyboardKey.keyV) {
+            widget.onPaste(widget.blockIndex);
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: KeyboardListener(
+        focusNode: FocusNode(),
+        onKeyEvent: (event) {
+          if (event is! KeyDownEvent) return;
+
+          if (event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+            if (HardwareKeyboard.instance.logicalKeysPressed
+                .contains(LogicalKeyboardKey.enter)) {
+              widget.onEnter(
+                  widget.blockIndex, _textController.selection.baseOffset);
+            }
+          } else if (event.logicalKey == LogicalKeyboardKey.backspace) {
+            if (_textController.selection.baseOffset == 0 &&
+                _textController.selection.extentOffset == 0) {
+              widget.onBackspaceAtStart(widget.blockIndex);
+            }
+          } else if (event.logicalKey == LogicalKeyboardKey.delete) {
+            if (_textController.selection.baseOffset ==
+                _textController.text.length) {
+              widget.onDeleteAtEnd(widget.blockIndex);
             }
           }
-          return KeyEventResult.ignored;
         },
-        child: KeyboardListener(
-          focusNode: FocusNode(),
-          onKeyEvent: (event) {
-            if (event is! KeyDownEvent) return;
-
-            if (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-              // Only handle hardware enter keys here. Soft keyboard newlines are handled in _onControllerChanged.
-              if (HardwareKeyboard.instance.logicalKeysPressed
-                  .contains(LogicalKeyboardKey.enter)) {
-                widget.onEnter(
-                    widget.blockIndex, _textController.selection.baseOffset);
-              }
-            } else if (event.logicalKey == LogicalKeyboardKey.backspace) {
-              if (_textController.selection.baseOffset == 0 &&
-                  _textController.selection.extentOffset == 0) {
-                widget.onBackspaceAtStart(widget.blockIndex);
-              }
-            } else if (event.logicalKey == LogicalKeyboardKey.delete) {
-              if (_textController.selection.baseOffset ==
-                  _textController.text.length) {
-                widget.onDeleteAtEnd(widget.blockIndex);
-              }
-            }
-          },
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            textSelectionTheme: TextSelectionThemeData(
+              selectionColor: widget.selectionColor,
+              cursorColor: widget.cursorColor,
+              selectionHandleColor: widget.editorSettings.selectionHandleColor,
+            ),
+          ),
           child: TextField(
             controller: _textController,
             focusNode: widget.focusNode,
@@ -393,22 +366,25 @@ class BlockWidgetState extends State<BlockWidget> {
             maxLines: null,
             textAlign: _getTextAlign(),
             cursorColor: widget.cursorColor,
-            cursorWidth: widget.cursorWidth,
+            cursorWidth: widget.cursorWidth ?? 2.0,
             cursorRadius: widget.cursorRadius,
-            style: TextStyle(
+            strutStyle: StrutStyle(
               fontSize: _getFontSize(),
-              fontWeight: _getFontWeight(),
-              color: defaultColor,
+              height: 1.2,
+              forceStrutHeight: true,
             ),
+            style: _getTextStyle(
+                widget.editorSettings.defaultFontSize, defaultColor),
             decoration: InputDecoration(
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
               isDense: true,
-              hintText: widget.blockIndex == 0 ? widget.hint : null,
+              hintText: widget.hint,
               hintStyle: TextStyle(
                 fontSize: _getFontSize(),
                 fontWeight: _getFontWeight(),
                 color: hintColor,
+                height: 1.2,
               ),
             ),
             onTap: () {
