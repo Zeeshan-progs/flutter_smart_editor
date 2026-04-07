@@ -7,16 +7,9 @@ library flutter_smart_editor;
 export 'smart_editor.dart';
 export 'smart_editor_controller.dart';
 
-// Settings (6 granular settings classes)
+// Settings (Simplified into 2 classes)
 export 'src/models/editor_settings.dart';
 export 'src/models/toolbar_settings.dart';
-export 'src/models/scroll_settings.dart';
-export 'src/models/keyboard_settings.dart';
-export 'src/models/selection_settings.dart';
-export 'src/models/style_settings.dart';
-
-// Callbacks
-export 'src/models/callbacks.dart';
 
 // Toolbar button groups
 export 'src/models/toolbar_buttons.dart';

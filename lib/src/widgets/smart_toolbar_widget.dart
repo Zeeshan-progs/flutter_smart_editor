@@ -3,12 +3,11 @@ import '../core/document_controller.dart';
 import '../models/enums.dart';
 import '../models/toolbar_settings.dart';
 import '../models/toolbar_buttons.dart';
+import 'toolbar/color_picker_button.dart';
+import 'toolbar/font_size_picker_button.dart';
+import 'toolbar/font_picker_button.dart';
 
 /// A premium Material 3 toolbar for the flutter smart editor.
-///
-/// Displays formatting buttons (Bold, Italic, Underline, etc.) and
-/// dropdowns (heading style). Communicates with the [DocumentController]
-/// to apply formatting.
 class SmartToolbar extends StatefulWidget {
   const SmartToolbar({
     super.key,
@@ -18,6 +17,7 @@ class SmartToolbar extends StatefulWidget {
     required this.getSelection,
     this.onFormatApplied,
     this.onPendingFormatChanged,
+    this.onFocusRequested,
     this.isDarkMode = false,
   });
 
@@ -27,9 +27,8 @@ class SmartToolbar extends StatefulWidget {
   final TextSelection? Function() getSelection;
   final VoidCallback? onFormatApplied;
 
-  /// Called when user toggles formatting at cursor (no selection).
-  /// Provides the full pending format state to the editor.
-  final void Function(Map<String, bool> formats)? onPendingFormatChanged;
+  final ValueChanged<Map<String, dynamic>>? onPendingFormatChanged;
+  final VoidCallback? onFocusRequested;
 
   final bool isDarkMode;
 
@@ -38,14 +37,21 @@ class SmartToolbar extends StatefulWidget {
 }
 
 class SmartToolbarState extends State<SmartToolbar> {
-  // Formatting state tracked by the toolbar
   bool _isBold = false;
   bool _isItalic = false;
   bool _isUnderline = false;
   bool _isStrikethrough = false;
+  Color? _foregroundColor;
+  Color? _backgroundColor;
+  double _fontSize = 12;
+  String? _fontFamily;
+  SmartTextAlign _currentTextAlign = SmartTextAlign.left;
   BlockType _currentBlockType = BlockType.paragraph;
   bool _enabled = true;
   bool _expanded = false;
+
+  TextSelection? _cachedSelection;
+  int? _cachedBlockIndex;
 
   @override
   void initState() {
@@ -53,16 +59,32 @@ class SmartToolbarState extends State<SmartToolbar> {
     _expanded = widget.settings.initiallyExpanded;
   }
 
-  /// Update the toolbar's formatting state from outside
-  void updateFormatState(int blockIndex, Map<String, bool> formats) {
+  void updateFormatState(int blockIndex, Map<String, dynamic> formats) {
     if (!mounted) return;
     setState(() {
-      _isBold = formats['bold'] ?? false;
-      _isItalic = formats['italic'] ?? false;
-      _isUnderline = formats['underline'] ?? false;
-      _isStrikethrough = formats['strikethrough'] ?? false;
+      final currentSelection = widget.getSelection();
+      if (blockIndex >= 0) {
+        _cachedBlockIndex = blockIndex;
+      }
+      if (currentSelection != null && currentSelection.isValid) {
+        if (!currentSelection.isCollapsed) {
+          _cachedSelection = currentSelection;
+        } else if (_cachedSelection == null || _cachedSelection!.isCollapsed) {
+          _cachedSelection = currentSelection;
+        }
+      }
 
-      // Update block type
+      _isBold = formats['bold'] == true;
+      _isItalic = formats['italic'] == true;
+      _isUnderline = formats['underline'] == true;
+      _isStrikethrough = formats['strikethrough'] == true;
+      _foregroundColor = formats['foregroundColor'] as Color?;
+      _backgroundColor = formats['backgroundColor'] as Color?;
+      _fontSize = formats['fontSize'] as double? ?? 12;
+      _fontFamily = formats['fontFamily'] as String?;
+      _currentTextAlign =
+          formats['alignment'] as SmartTextAlign? ?? SmartTextAlign.left;
+
       if (blockIndex >= 0 &&
           blockIndex < widget.documentController.document.blocks.length) {
         _currentBlockType =
@@ -71,7 +93,6 @@ class SmartToolbarState extends State<SmartToolbar> {
     });
   }
 
-  /// Enable or disable the toolbar
   void setEnabled(bool enabled) {
     if (!mounted) return;
     setState(() {
@@ -79,57 +100,131 @@ class SmartToolbarState extends State<SmartToolbar> {
     });
   }
 
-  /// Applies a format toggle — works with both selections and cursor positions
   void _toggleFormat(String format) {
     if (!_enabled) return;
 
-    final blockIndex = widget.getFocusedBlockIndex();
-    final selection = widget.getSelection();
+    var blockIndex = widget.getFocusedBlockIndex();
+    var selection = widget.getSelection();
+
+    if (selection == null || !selection.isValid || blockIndex < 0) {
+      if (_cachedSelection != null && _cachedBlockIndex != null) {
+        selection = _cachedSelection;
+        blockIndex = _cachedBlockIndex!;
+      }
+    } else if (selection.isCollapsed &&
+        _cachedSelection != null &&
+        !_cachedSelection!.isCollapsed &&
+        _cachedBlockIndex == blockIndex) {
+      selection = _cachedSelection;
+    }
+
     if (selection == null) return;
 
     if (selection.isCollapsed) {
-      // Cursor with no selection — toggle the format state visually
-      // and notify the editor of the pending format
       setState(() {
         switch (format) {
-          case 'bold':
-            _isBold = !_isBold;
-            break;
-          case 'italic':
-            _isItalic = !_isItalic;
-            break;
-          case 'underline':
-            _isUnderline = !_isUnderline;
-            break;
-          case 'strikethrough':
-            _isStrikethrough = !_isStrikethrough;
-            break;
+          case 'bold': _isBold = !_isBold; break;
+          case 'italic': _isItalic = !_isItalic; break;
+          case 'underline': _isUnderline = !_isUnderline; break;
+          case 'strikethrough': _isStrikethrough = !_isStrikethrough; break;
         }
       });
 
-      // Notify editor of the full pending format state
       widget.onPendingFormatChanged?.call({
         'bold': _isBold,
         'italic': _isItalic,
         'underline': _isUnderline,
         'strikethrough': _isStrikethrough,
+        'foregroundColor': _foregroundColor,
+        'backgroundColor': _backgroundColor,
+        'fontSize': _fontSize,
+        'fontFamily': _fontFamily,
       });
       return;
     }
 
-    // Has a selection — apply format to the selected range
     final start = selection.start;
     final end = selection.end;
 
     widget.documentController.toggleFormat(blockIndex, start, end, format);
     widget.onFormatApplied?.call();
 
-    // Update local state from the document
     final formats = widget.documentController.getFormatAt(blockIndex, start);
     updateFormatState(blockIndex, formats);
   }
 
-  /// Changes the block type
+  void _applyValueFormat(String format, dynamic value) {
+    if (!_enabled) return;
+
+    var blockIndex = widget.getFocusedBlockIndex();
+    var selection = widget.getSelection();
+
+    if (selection == null || !selection.isValid || blockIndex < 0) {
+      if (_cachedSelection != null && _cachedBlockIndex != null) {
+        selection = _cachedSelection;
+        blockIndex = _cachedBlockIndex!;
+      }
+    } else if (selection.isCollapsed &&
+        _cachedSelection != null &&
+        !_cachedSelection!.isCollapsed &&
+        _cachedBlockIndex == blockIndex) {
+      selection = _cachedSelection;
+    }
+
+    if (selection == null) return;
+
+    if (selection.isCollapsed) {
+      setState(() {
+        if (format == 'foregroundColor') {
+          _foregroundColor = value as Color?;
+        } else if (format == 'backgroundColor') {
+          _backgroundColor = value as Color?;
+        } else if (format == 'fontSize') {
+          _fontSize = value as double? ?? 12;
+        } else if (format == 'fontFamily') {
+          _fontFamily = value as String?;
+        }
+      });
+      widget.onPendingFormatChanged?.call({
+        'bold': _isBold,
+        'italic': _isItalic,
+        'underline': _isUnderline,
+        'strikethrough': _isStrikethrough,
+        'foregroundColor': _foregroundColor,
+        'backgroundColor': _backgroundColor,
+        'fontSize': _fontSize,
+        'fontFamily': _fontFamily,
+      });
+      widget.onFocusRequested?.call();
+      return;
+    }
+
+    final start = selection.start;
+    final end = selection.end;
+    widget.documentController
+        .applyFormat(blockIndex, start, end, format, value);
+    widget.onFormatApplied?.call();
+
+    final formats = widget.documentController.getFormatAt(blockIndex, start);
+    updateFormatState(blockIndex, formats);
+    widget.onFocusRequested?.call();
+  }
+
+  void _clearAll() {
+    if (!_enabled) return;
+    final blockIndex = widget.getFocusedBlockIndex();
+    final selection = widget.getSelection();
+    if (selection == null || selection.isCollapsed) return;
+
+    widget.documentController.clearFormat(
+        blockIndex, selection.start, selection.end - selection.start);
+    widget.onFormatApplied?.call();
+
+    final formats =
+        widget.documentController.getFormatAt(blockIndex, selection.start);
+    updateFormatState(blockIndex, formats);
+  }
+
   void _changeBlockType(BlockType newType) {
     if (!_enabled) return;
 
@@ -142,23 +237,27 @@ class SmartToolbarState extends State<SmartToolbar> {
     });
   }
 
-  /// Gets the display name for a block type
+  void _changeAlignment(SmartTextAlign alignment) {
+    if (!_enabled) return;
+
+    final blockIndex = widget.getFocusedBlockIndex();
+    widget.documentController.setAlignment(blockIndex, alignment);
+    widget.onFormatApplied?.call();
+
+    setState(() {
+      _currentTextAlign = alignment;
+    });
+  }
+
   String _blockTypeLabel(BlockType type) {
     switch (type) {
-      case BlockType.paragraph:
-        return 'Normal';
-      case BlockType.heading1:
-        return 'Heading 1';
-      case BlockType.heading2:
-        return 'Heading 2';
-      case BlockType.heading3:
-        return 'Heading 3';
-      case BlockType.heading4:
-        return 'Heading 4';
-      case BlockType.heading5:
-        return 'Heading 5';
-      case BlockType.heading6:
-        return 'Heading 6';
+      case BlockType.paragraph: return 'Normal';
+      case BlockType.heading1: return 'Heading 1';
+      case BlockType.heading2: return 'Heading 2';
+      case BlockType.heading3: return 'Heading 3';
+      case BlockType.heading4: return 'Heading 4';
+      case BlockType.heading5: return 'Heading 5';
+      case BlockType.heading6: return 'Heading 6';
     }
   }
 
@@ -167,14 +266,11 @@ class SmartToolbarState extends State<SmartToolbar> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Adaptive colors
     final surfaceColor = widget.isDarkMode
         ? colorScheme.surfaceContainerHigh
         : colorScheme.surfaceContainerLow;
-    final onSurface =
-        widget.isDarkMode ? colorScheme.onSurface : colorScheme.onSurface;
-    final activeColor =
-        widget.settings.buttonSelectedColor ?? colorScheme.primary;
+    final onSurface = widget.isDarkMode ? colorScheme.onSurface : colorScheme.onSurface;
+    final activeColor = widget.settings.buttonSelectedColor ?? colorScheme.primary;
     final activeBg = activeColor.withValues(alpha: 0.12);
     final disabledColor = onSurface.withValues(alpha: 0.3);
     final dividerColor = widget.isDarkMode
@@ -252,8 +348,8 @@ class SmartToolbarState extends State<SmartToolbar> {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.zero,
-      decoration: BoxDecoration(
+      padding: widget.settings.padding ?? EdgeInsets.zero,
+      decoration: widget.settings.decoration ?? BoxDecoration(
         color: surfaceColor,
         border: widget.settings.showBorder
             ? Border(
@@ -272,7 +368,6 @@ class SmartToolbarState extends State<SmartToolbar> {
     );
   }
 
-  /// Builds the list of toolbar widgets based on settings
   List<Widget> _buildToolbarItems({
     required Color onSurface,
     required Color activeColor,
@@ -285,27 +380,40 @@ class SmartToolbarState extends State<SmartToolbar> {
     for (var i = 0; i < widget.settings.defaultButtons.length; i++) {
       final group = widget.settings.defaultButtons[i];
 
-      // Add separator between groups
       if (items.isNotEmpty && widget.settings.showSeparators) {
         items.add(_buildSeparator(dividerColor));
       }
 
       if (group is SmartStyleButtons && group.style) {
-        items
-            .add(_buildStyleChip(group, onSurface, activeColor, disabledColor));
+        items.add(_buildStyleChip(group, onSurface, activeColor, disabledColor));
       } else if (group is SmartFontButtons) {
-        items.addAll(_buildFontButtons(
-            group, onSurface, activeColor, activeBg, disabledColor));
+        items.addAll(_buildFontButtons(group, onSurface, activeColor, activeBg, disabledColor));
       } else if (group is SmartOtherButtons) {
-        items.addAll(_buildOtherButtons(
-            group, onSurface, activeColor, activeBg, disabledColor));
+        items.addAll(_buildOtherButtons(group, onSurface, activeColor, activeBg, disabledColor));
+      } else if (group is SmartColorButtons) {
+        items.addAll(_buildColorButtons(group, onSurface, activeColor, activeBg, disabledColor));
+      } else if (group is SmartFontSizeButtons && group.fontSize) {
+        items.add(FontSizePickerButton(
+          currentSize: _fontSize,
+          enabled: _enabled,
+          activeColor: activeColor,
+          tooltip: "Font Size",
+          onSizeChanged: (size) => _applyValueFormat('fontSize', size),
+        ));
+      } else if (group is SmartFontFamilyButtons && group.fontFamily) {
+        items.add(FontPickerButton(
+          currentFont: _fontFamily,
+          enabled: _enabled,
+          onFontChanged: (font) => _applyValueFormat('fontFamily', font),
+        ));
+      } else if (group is SmartParagraphButtons) {
+        items.addAll(_buildParagraphButtons(group, onSurface, activeColor, activeBg, disabledColor));
       }
     }
 
     return items;
   }
 
-  /// Builds a vertical separator
   Widget _buildSeparator(Color dividerColor) {
     return widget.settings.separatorWidget ??
         Padding(
@@ -321,7 +429,6 @@ class SmartToolbarState extends State<SmartToolbar> {
         );
   }
 
-  /// Builds the heading/paragraph style chip selector
   Widget _buildStyleChip(SmartStyleButtons group, Color onSurface,
       Color activeColor, Color disabledColor) {
     final isHeading = _currentBlockType != BlockType.paragraph;
@@ -342,29 +449,16 @@ class SmartToolbarState extends State<SmartToolbar> {
             decoration: BoxDecoration(
               color: isSelected ? activeColor.withValues(alpha: 0.12) : null,
               borderRadius: BorderRadius.circular(8),
-              border:
-                  isSelected ? Border.all(color: activeColor, width: 1) : null,
+              border: isSelected ? Border.all(color: activeColor, width: 1) : null,
             ),
             child: Row(
               children: [
-                // if (isSelected)
-                //   Icon(Icons.check, size: 16, color: activeColor)
-                // else
-                //   const SizedBox(width: 16),
                 const SizedBox(width: 8),
                 Text(
                   _blockTypeLabel(type),
                   style: TextStyle(
-                    fontWeight: type != BlockType.paragraph
-                        ? FontWeight.w600
-                        : FontWeight.w400,
-                    fontSize: type == BlockType.heading1
-                        ? 18
-                        : type == BlockType.heading2
-                            ? 16
-                            : type == BlockType.heading3
-                                ? 15
-                                : 14,
+                    fontWeight: type != BlockType.paragraph ? FontWeight.w600 : FontWeight.w400,
+                    fontSize: type == BlockType.heading1 ? 18 : type == BlockType.heading2 ? 16 : 14,
                     color: isSelected ? activeColor : null,
                   ),
                 ),
@@ -373,7 +467,7 @@ class SmartToolbarState extends State<SmartToolbar> {
           ),
         );
       }).toList(),
-      child: _ToolbarChip(
+      child: ToolbarChip(
         label: _blockTypeLabel(_currentBlockType),
         isActive: isHeading,
         activeColor: activeColor,
@@ -387,137 +481,66 @@ class SmartToolbarState extends State<SmartToolbar> {
     );
   }
 
-  /// Builds font formatting buttons (Bold, Italic, Underline, etc.)
-  List<Widget> _buildFontButtons(
-    SmartFontButtons group,
-    Color onSurface,
-    Color activeColor,
-    Color activeBg,
-    Color disabledColor,
-  ) {
+  List<Widget> _buildFontButtons(SmartFontButtons group, Color onSurface, Color activeColor, Color activeBg, Color disabledColor) {
     final buttons = <Widget>[];
-
     if (group.bold) {
-      buttons.add(_ToolbarButton(
-        icon: Icons.format_bold,
-        isActive: _isBold,
-        onPressed: () => _toggleFormat('bold'),
-        activeColor: activeColor,
-        activeBg: activeBg,
-        onSurface: onSurface,
-        disabledColor: disabledColor,
-        enabled: _enabled,
-        size: widget.settings.itemHeight,
-        iconSize: widget.settings.buttonIconSize,
-        tooltip: 'Bold',
-      ));
+      buttons.add(_ToolbarButton(icon: Icons.format_bold, isActive: _isBold, onPressed: () => _toggleFormat('bold'), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Bold'));
     }
     if (group.italic) {
-      buttons.add(_ToolbarButton(
-        icon: Icons.format_italic,
-        isActive: _isItalic,
-        onPressed: () => _toggleFormat('italic'),
-        activeColor: activeColor,
-        activeBg: activeBg,
-        onSurface: onSurface,
-        disabledColor: disabledColor,
-        enabled: _enabled,
-        size: widget.settings.itemHeight,
-        iconSize: widget.settings.buttonIconSize,
-        tooltip: 'Italic',
-      ));
+      buttons.add(_ToolbarButton(icon: Icons.format_italic, isActive: _isItalic, onPressed: () => _toggleFormat('italic'), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Italic'));
     }
     if (group.underline) {
-      buttons.add(_ToolbarButton(
-        icon: Icons.format_underlined,
-        isActive: _isUnderline,
-        onPressed: () => _toggleFormat('underline'),
-        activeColor: activeColor,
-        activeBg: activeBg,
-        onSurface: onSurface,
-        disabledColor: disabledColor,
-        enabled: _enabled,
-        size: widget.settings.itemHeight,
-        iconSize: widget.settings.buttonIconSize,
-        tooltip: 'Underline',
-      ));
+      buttons.add(_ToolbarButton(icon: Icons.format_underlined, isActive: _isUnderline, onPressed: () => _toggleFormat('underline'), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Underline'));
     }
     if (group.strikethrough) {
-      buttons.add(_ToolbarButton(
-        icon: Icons.format_strikethrough,
-        isActive: _isStrikethrough,
-        onPressed: () => _toggleFormat('strikethrough'),
-        activeColor: activeColor,
-        activeBg: activeBg,
-        onSurface: onSurface,
-        disabledColor: disabledColor,
-        enabled: _enabled,
-        size: widget.settings.itemHeight,
-        iconSize: widget.settings.buttonIconSize,
-        tooltip: 'Strikethrough',
-      ));
+      buttons.add(_ToolbarButton(icon: Icons.format_strikethrough, isActive: _isStrikethrough, onPressed: () => _toggleFormat('strikethrough'), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Strikethrough'));
     }
-
+    if (group.clearAll) {
+      buttons.add(_ToolbarButton(icon: Icons.format_clear, isActive: false, onPressed: _clearAll, activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Clear Formatting'));
+    }
     return buttons;
   }
 
-  /// Builds undo/redo and other buttons
-  List<Widget> _buildOtherButtons(
-    SmartOtherButtons group,
-    Color onSurface,
-    Color activeColor,
-    Color activeBg,
-    Color disabledColor,
-  ) {
+  List<Widget> _buildOtherButtons(SmartOtherButtons group, Color onSurface, Color activeColor, Color activeBg, Color disabledColor) {
     final buttons = <Widget>[];
-
     if (group.undo) {
-      buttons.add(_ToolbarButton(
-        icon: Icons.undo_rounded,
-        isActive: false,
-        onPressed: () {
-          widget.documentController.undo();
-          widget.onFormatApplied?.call();
-        },
-        activeColor: activeColor,
-        activeBg: activeBg,
-        onSurface: onSurface,
-        disabledColor: disabledColor,
-        enabled: _enabled,
-        size: widget.settings.itemHeight,
-        iconSize: widget.settings.buttonIconSize,
-        tooltip: 'Undo',
-      ));
+      buttons.add(_ToolbarButton(icon: Icons.undo_rounded, isActive: false, onPressed: () { widget.documentController.undo(); widget.onFormatApplied?.call(); }, activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Undo'));
     }
     if (group.redo) {
-      buttons.add(_ToolbarButton(
-        icon: Icons.redo_rounded,
-        isActive: false,
-        onPressed: () {
-          widget.documentController.redo();
-          widget.onFormatApplied?.call();
-        },
-        activeColor: activeColor,
-        activeBg: activeBg,
-        onSurface: onSurface,
-        disabledColor: disabledColor,
-        enabled: _enabled,
-        size: widget.settings.itemHeight,
-        iconSize: widget.settings.buttonIconSize,
-        tooltip: 'Redo',
-      ));
+      buttons.add(_ToolbarButton(icon: Icons.redo_rounded, isActive: false, onPressed: () { widget.documentController.redo(); widget.onFormatApplied?.call(); }, activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Redo'));
     }
+    return buttons;
+  }
 
+  List<Widget> _buildColorButtons(SmartColorButtons group, Color onSurface, Color activeColor, Color activeBg, Color disabledColor) {
+    final buttons = <Widget>[];
+    if (group.foregroundColor) {
+      buttons.add(ColorPickerButton(icon: Icons.format_color_text, currentColor: _foregroundColor, tooltip: 'Text Color', enabled: _enabled, onColorChanged: (color) => _applyValueFormat('foregroundColor', color)));
+    }
+    if (group.highlightColor) {
+      buttons.add(ColorPickerButton(icon: Icons.color_lens, currentColor: _backgroundColor, tooltip: 'Highlight Color', enabled: _enabled, onColorChanged: (color) => _applyValueFormat('backgroundColor', color)));
+    }
+    return buttons;
+  }
+
+  List<Widget> _buildParagraphButtons(SmartParagraphButtons group, Color onSurface, Color activeColor, Color activeBg, Color disabledColor) {
+    final buttons = <Widget>[];
+    if (group.alignLeft) {
+      buttons.add(_ToolbarButton(icon: Icons.format_align_left, isActive: _currentTextAlign == SmartTextAlign.left, onPressed: () => _changeAlignment(SmartTextAlign.left), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Align Left'));
+    }
+    if (group.alignCenter) {
+      buttons.add(_ToolbarButton(icon: Icons.format_align_center, isActive: _currentTextAlign == SmartTextAlign.center, onPressed: () => _changeAlignment(SmartTextAlign.center), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Align Center'));
+    }
+    if (group.alignRight) {
+      buttons.add(_ToolbarButton(icon: Icons.format_align_right, isActive: _currentTextAlign == SmartTextAlign.right, onPressed: () => _changeAlignment(SmartTextAlign.right), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Align Right'));
+    }
+    if (group.alignJustify) {
+      buttons.add(_ToolbarButton(icon: Icons.format_align_justify, isActive: _currentTextAlign == SmartTextAlign.justify, onPressed: () => _changeAlignment(SmartTextAlign.justify), activeColor: activeColor, activeBg: activeBg, onSurface: onSurface, disabledColor: disabledColor, enabled: _enabled, size: widget.settings.itemHeight, iconSize: widget.settings.buttonIconSize, tooltip: 'Align Justify'));
+    }
     return buttons;
   }
 }
 
-// ─── Premium Toolbar Button Widget ──────────────────────────────────────
-
-/// A single toolbar toggle button with Material 3 styling.
-///
-/// Shows a rounded, elevated container with icon. Active state uses
-/// the primary color fill with a subtle background tint.
 class _ToolbarButton extends StatelessWidget {
   const _ToolbarButton({
     required this.icon,
@@ -530,7 +553,7 @@ class _ToolbarButton extends StatelessWidget {
     required this.enabled,
     required this.size,
     required this.iconSize,
-    this.tooltip,
+    required this.tooltip,
   });
 
   final IconData icon;
@@ -543,61 +566,26 @@ class _ToolbarButton extends StatelessWidget {
   final bool enabled;
   final double size;
   final double iconSize;
-  final String? tooltip;
+  final String tooltip;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = !enabled
-        ? disabledColor
-        : isActive
-            ? activeColor
-            : onSurface.withValues(alpha: 0.7);
-
-    Widget button = AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
-      width: size,
-      height: size,
-      margin: const EdgeInsets.symmetric(horizontal: 1),
-      decoration: BoxDecoration(
-        color: isActive && enabled ? activeBg : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(8),
-          splashColor: activeColor.withValues(alpha: 0.15),
-          highlightColor: activeColor.withValues(alpha: 0.08),
-          child: Center(
-            child: Icon(
-              icon,
-              size: iconSize,
-              color: effectiveColor,
-            ),
-          ),
-        ),
+    return IconButton(
+      icon: Icon(icon, color: !enabled ? disabledColor : (isActive ? activeColor : onSurface), size: iconSize),
+      onPressed: enabled ? onPressed : null,
+      tooltip: tooltip,
+      constraints: BoxConstraints.tightFor(width: size, height: size),
+      style: IconButton.styleFrom(
+        backgroundColor: isActive ? activeBg : null,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
-
-    if (tooltip != null) {
-      button = Tooltip(
-        message: tooltip!,
-        preferBelow: false,
-        child: button,
-      );
-    }
-
-    return button;
   }
 }
 
-// ─── Toolbar Chip (for dropdown triggers) ───────────────────────────────
-
-/// A chip-style button used as a dropdown trigger (e.g. paragraph style).
-class _ToolbarChip extends StatelessWidget {
-  const _ToolbarChip({
+class ToolbarChip extends StatelessWidget {
+  const ToolbarChip({
+    super.key,
     required this.label,
     required this.isActive,
     required this.activeColor,
@@ -605,7 +593,7 @@ class _ToolbarChip extends StatelessWidget {
     required this.disabledColor,
     required this.enabled,
     required this.height,
-    this.width,
+    required this.width,
     this.showDropdownArrow = false,
   });
 
@@ -616,49 +604,26 @@ class _ToolbarChip extends StatelessWidget {
   final Color disabledColor;
   final bool enabled;
   final double height;
-  final double? width;
+  final double width;
   final bool showDropdownArrow;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = !enabled
-        ? disabledColor
-        : isActive
-            ? activeColor
-            : onSurface.withValues(alpha: 0.75);
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      height: height,
+    return Container(
+      height: height - 8,
       width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      margin: const EdgeInsets.symmetric(horizontal: 1),
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: isActive && enabled
-            ? activeColor.withValues(alpha: 0.12)
-            : Colors.transparent,
+        color: isActive ? activeColor.withValues(alpha: 0.08) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isActive ? activeColor : onSurface.withValues(alpha: 0.1), width: 1),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: effectiveColor,
-              fontSize: 13,
-              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-              letterSpacing: 0.2,
-            ),
-          ),
-          if (showDropdownArrow) ...[
-            const SizedBox(width: 2),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 18,
-              color: effectiveColor,
-            ),
-          ],
+          Expanded(child: Text(label, style: TextStyle(color: !enabled ? disabledColor : (isActive ? activeColor : onSurface), fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
+          if (showDropdownArrow) Icon(Icons.arrow_drop_down, size: 18, color: !enabled ? disabledColor : (isActive ? activeColor : onSurface)),
         ],
       ),
     );

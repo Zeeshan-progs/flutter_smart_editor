@@ -15,8 +15,6 @@ class TextFormatSpan {
   bool isItalic;
   bool isUnderline;
   bool isStrikethrough;
-  bool isSuperscript;
-  bool isSubscript;
   String? fontFamily;
   double? fontSize;
   Color? foregroundColor;
@@ -29,8 +27,6 @@ class TextFormatSpan {
     this.isItalic = false,
     this.isUnderline = false,
     this.isStrikethrough = false,
-    this.isSuperscript = false,
-    this.isSubscript = false,
     this.fontFamily,
     this.fontSize,
     this.foregroundColor,
@@ -45,13 +41,16 @@ class TextFormatSpan {
     bool? isItalic,
     bool? isUnderline,
     bool? isStrikethrough,
-    bool? isSuperscript,
-    bool? isSubscript,
     String? fontFamily,
     double? fontSize,
     Color? foregroundColor,
     Color? backgroundColor,
     String? linkUrl,
+    bool clearFontFamily = false,
+    bool clearFontSize = false,
+    bool clearForegroundColor = false,
+    bool clearBackgroundColor = false,
+    bool clearLinkUrl = false,
   }) {
     return TextFormatSpan(
       text: text ?? this.text,
@@ -59,13 +58,15 @@ class TextFormatSpan {
       isItalic: isItalic ?? this.isItalic,
       isUnderline: isUnderline ?? this.isUnderline,
       isStrikethrough: isStrikethrough ?? this.isStrikethrough,
-      isSuperscript: isSuperscript ?? this.isSuperscript,
-      isSubscript: isSubscript ?? this.isSubscript,
-      fontFamily: fontFamily ?? this.fontFamily,
-      fontSize: fontSize ?? this.fontSize,
-      foregroundColor: foregroundColor ?? this.foregroundColor,
-      backgroundColor: backgroundColor ?? this.backgroundColor,
-      linkUrl: linkUrl ?? this.linkUrl,
+      fontFamily: clearFontFamily ? null : (fontFamily ?? this.fontFamily),
+      fontSize: clearFontSize ? null : (fontSize ?? this.fontSize),
+      foregroundColor: clearForegroundColor
+          ? null
+          : (foregroundColor ?? this.foregroundColor),
+      backgroundColor: clearBackgroundColor
+          ? null
+          : (backgroundColor ?? this.backgroundColor),
+      linkUrl: clearLinkUrl ? null : (linkUrl ?? this.linkUrl),
     );
   }
 
@@ -75,8 +76,6 @@ class TextFormatSpan {
         isItalic == other.isItalic &&
         isUnderline == other.isUnderline &&
         isStrikethrough == other.isStrikethrough &&
-        isSuperscript == other.isSuperscript &&
-        isSubscript == other.isSubscript &&
         fontFamily == other.fontFamily &&
         fontSize == other.fontSize &&
         foregroundColor == other.foregroundColor &&
@@ -107,10 +106,14 @@ abstract class BlockNode {
   /// Text alignment for this block
   SmartTextAlign alignment;
 
+  /// Line height (multiplier) for this block
+  double? lineHeight;
+
   BlockNode({
     String? id,
     List<TextFormatSpan>? spans,
     this.alignment = SmartTextAlign.left,
+    this.lineHeight,
   })  : id = id ?? UniqueKey().toString(),
         spans = spans ?? [TextFormatSpan.plain('')];
 
@@ -179,6 +182,7 @@ class ParagraphNode extends BlockNode {
     super.id,
     super.spans,
     super.alignment,
+    super.lineHeight,
   });
 
   @override
@@ -192,6 +196,7 @@ class ParagraphNode extends BlockNode {
         id: id,
         spans: spans.map((s) => s.copyWith()).toList(),
         alignment: alignment,
+        lineHeight: lineHeight,
       );
 }
 
@@ -204,6 +209,7 @@ class HeadingNode extends BlockNode {
     super.id,
     super.spans,
     super.alignment,
+    super.lineHeight,
   }) : assert(level >= 1 && level <= 6);
 
   @override
@@ -235,6 +241,7 @@ class HeadingNode extends BlockNode {
         id: id,
         spans: spans.map((s) => s.copyWith()).toList(),
         alignment: alignment,
+        lineHeight: lineHeight,
       );
 }
 

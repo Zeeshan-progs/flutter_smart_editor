@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_smart_editor/src/core/document.dart';
 import 'package:flutter_smart_editor/src/core/document_controller.dart';
 import 'package:flutter_smart_editor/src/models/enums.dart';
@@ -155,9 +156,9 @@ void main() {
       expect(controller.document.blocks[0].plainText, 'Hello World');
     });
 
-    test('undo when nothing to undo returns false', () {
-      final result = controller.undo();
-      expect(result, false);
+    test('undo when nothing to undo does nothing', () {
+      controller.undo();
+      expect(controller.document.blocks[0].plainText, '');
     });
 
     test('clear resets to empty document', () {
@@ -166,6 +167,87 @@ void main() {
 
       expect(controller.document.blocks.length, 1);
       expect(controller.document.blocks[0].plainText, '');
+    });
+  });
+
+  group('Phase 2: Extended Formatting', () {
+    test('applies font family to range', () {
+      controller.insertText(0, 0, 'Hello World');
+      controller.applyFormat(0, 0, 5, 'fontFamily', 'Roboto');
+
+      final spans = controller.document.blocks[0].spans;
+      expect(spans[0].fontFamily, 'Roboto');
+      expect(spans[0].text, 'Hello');
+      expect(spans[1].fontFamily, isNull);
+    });
+
+    test('applies font size to range', () {
+      controller.insertText(0, 0, 'Hello World');
+      controller.applyFormat(0, 0, 5, 'fontSize', 18.0);
+
+      final spans = controller.document.blocks[0].spans;
+      expect(spans[0].fontSize, 18.0);
+      expect(spans[0].text, 'Hello');
+    });
+
+    test('applies foreground color to range', () {
+      const testColor = Color(0xFFFF0000); // Red
+      controller.insertText(0, 0, 'Hello World');
+      controller.applyFormat(0, 0, 5, 'foregroundColor', testColor);
+
+      final spans = controller.document.blocks[0].spans;
+      expect(spans[0].foregroundColor, testColor);
+    });
+
+    test('applies background color to range', () {
+      const testColor = Color(0xFF00FF00); // Green
+      controller.insertText(0, 0, 'Hello World');
+      controller.applyFormat(0, 0, 5, 'backgroundColor', testColor);
+
+      final spans = controller.document.blocks[0].spans;
+      expect(spans[0].backgroundColor, testColor);
+    });
+
+    test('sets block alignment', () {
+      controller.setAlignment(0, SmartTextAlign.center);
+      expect(controller.document.blocks[0].alignment, SmartTextAlign.center);
+
+      controller.setAlignment(0, SmartTextAlign.right);
+      expect(controller.document.blocks[0].alignment, SmartTextAlign.right);
+    });
+
+    test('sets block line height', () {
+      controller.setLineHeight(0, 2.0);
+      expect(controller.document.blocks[0].lineHeight, 2.0);
+
+      controller.setLineHeight(0, null);
+      expect(controller.document.blocks[0].lineHeight, isNull);
+    });
+
+    test('clears formatting on a range', () {
+      // 1. Setup formatted text
+      controller.document.blocks[0].spans = [
+        TextFormatSpan(
+          text: 'Hello World',
+          isBold: true,
+          fontSize: 20.0,
+          fontFamily: 'Lato',
+        ),
+      ];
+
+      // 2. Clear format for 'Hello'
+      controller.clearFormat(0, 0, 5);
+
+      final spans = controller.document.blocks[0].spans;
+      // Should have 2 spans now: 'Hello' (plain) and ' World' (formatted)
+      expect(spans.length, 2);
+      expect(spans[0].text, 'Hello');
+      expect(spans[0].isBold, false);
+      expect(spans[0].fontSize, isNull);
+
+      expect(spans[1].text, ' World');
+      expect(spans[1].isBold, true);
+      expect(spans[1].fontSize, 20.0);
     });
   });
 }

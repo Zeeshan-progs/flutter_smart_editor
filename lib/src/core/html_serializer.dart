@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import '../core/document.dart';
 import '../models/enums.dart';
 
@@ -95,16 +96,25 @@ class SmartHtmlSerializer {
       closeTags.insert(0, '</s>');
     }
 
-    // Superscript
-    if (span.isSuperscript) {
-      openTags.add('<sup>');
-      closeTags.insert(0, '</sup>');
+    // Colors and Fonts (Span with style)
+    final inlineStyles = <String>[];
+    if (span.foregroundColor != null) {
+      inlineStyles.add('color: #${_colorToHex(span.foregroundColor!)}');
+    }
+    if (span.backgroundColor != null) {
+      inlineStyles
+          .add('background-color: #${_colorToHex(span.backgroundColor!)}');
+    }
+    if (span.fontSize != null) {
+      inlineStyles.add('font-size: ${span.fontSize}px');
+    }
+    if (span.fontFamily != null) {
+      inlineStyles.add('font-family: ${span.fontFamily}');
     }
 
-    // Subscript
-    if (span.isSubscript) {
-      openTags.add('<sub>');
-      closeTags.insert(0, '</sub>');
+    if (inlineStyles.isNotEmpty) {
+      openTags.add('<span style="${inlineStyles.join('; ')}">');
+      closeTags.insert(0, '</span>');
     }
 
     // Write opening tags
@@ -119,6 +129,12 @@ class SmartHtmlSerializer {
     for (final tag in closeTags) {
       buffer.write(tag);
     }
+  }
+
+  /// Converts a Color to a hex string (RRGGBB)
+  String _colorToHex(Color color) {
+    // ignore: deprecated_member_use
+    return color.value.toRadixString(16).padLeft(8, '0').substring(2);
   }
 
   /// Escapes special HTML characters in text

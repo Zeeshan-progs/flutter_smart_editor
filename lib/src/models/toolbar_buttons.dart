@@ -32,8 +32,6 @@ class SmartFontButtons extends SmartToolbarGroup {
   final bool underline;
   final bool clearAll;
   final bool strikethrough;
-  final bool superscript;
-  final bool subscript;
 
   const SmartFontButtons({
     this.bold = true,
@@ -41,8 +39,6 @@ class SmartFontButtons extends SmartToolbarGroup {
     this.underline = true,
     this.clearAll = true,
     this.strikethrough = true,
-    this.superscript = true,
-    this.subscript = true,
   });
 
   /// Returns the icons for the primary font formatting buttons
@@ -59,8 +55,6 @@ class SmartFontButtons extends SmartToolbarGroup {
   List<IconData> getIcons2() {
     final icons = <IconData>[];
     if (strikethrough) icons.add(Icons.format_strikethrough);
-    if (superscript) icons.add(Icons.superscript);
-    if (subscript) icons.add(Icons.subscript);
     return icons;
   }
 }
@@ -73,6 +67,24 @@ class SmartColorButtons extends SmartToolbarGroup {
   const SmartColorButtons({
     this.foregroundColor = true,
     this.highlightColor = true,
+  });
+}
+
+/// Font size picker dropdown
+class SmartFontSizeButtons extends SmartToolbarGroup {
+  final bool fontSize;
+
+  const SmartFontSizeButtons({
+    this.fontSize = true,
+  });
+}
+
+/// Font family picker dropdown
+class SmartFontFamilyButtons extends SmartToolbarGroup {
+  final bool fontFamily;
+
+  const SmartFontFamilyButtons({
+    this.fontFamily = true,
   });
 }
 
@@ -95,22 +107,12 @@ class SmartParagraphButtons extends SmartToolbarGroup {
   final bool alignCenter;
   final bool alignRight;
   final bool alignJustify;
-  final bool increaseIndent;
-  final bool decreaseIndent;
-  final bool textDirection;
-  final bool lineHeight;
-  final bool caseConverter;
 
   const SmartParagraphButtons({
     this.alignLeft = true,
     this.alignCenter = true,
     this.alignRight = true,
     this.alignJustify = true,
-    this.increaseIndent = true,
-    this.decreaseIndent = true,
-    this.textDirection = true,
-    this.lineHeight = true,
-    this.caseConverter = true,
   });
 }
 

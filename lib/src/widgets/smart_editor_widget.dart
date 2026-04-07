@@ -3,11 +3,6 @@ import '../core/document.dart';
 import '../core/document_controller.dart';
 import '../core/html_serializer.dart';
 import '../models/editor_settings.dart';
-import '../models/scroll_settings.dart';
-import '../models/keyboard_settings.dart';
-import '../models/selection_settings.dart';
-import '../models/style_settings.dart';
-import '../models/callbacks.dart';
 import 'block_widget.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import '../core/html_parser.dart';
@@ -23,24 +18,14 @@ class SmartEditorWidget extends StatefulWidget {
     super.key,
     required this.documentController,
     this.editorSettings = const SmartEditorSettings(),
-    this.scrollSettings = const SmartScrollSettings(),
-    this.keyboardSettings = const SmartKeyboardSettings(),
-    this.selectionSettings = const SmartSelectionSettings(),
-    this.styleSettings = const SmartStyleSettings(),
-    this.callbacks = const SmartEditorCallbacks(),
     this.onFormatStateChanged,
   });
 
   final DocumentController documentController;
   final SmartEditorSettings editorSettings;
-  final SmartScrollSettings scrollSettings;
-  final SmartKeyboardSettings keyboardSettings;
-  final SmartSelectionSettings selectionSettings;
-  final SmartStyleSettings styleSettings;
-  final SmartEditorCallbacks callbacks;
 
   /// Internal callback to update toolbar state when formatting changes
-  final void Function(int blockIndex, Map<String, bool> formats)?
+  final void Function(int blockIndex, Map<String, dynamic> formats)?
       onFormatStateChanged;
 
   @override
@@ -57,6 +42,8 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   /// Pending format state — set when user toggles formatting at cursor
   /// position (no text selected). Applied to the next text input.
   TextFormatSpan? _pendingFormat;
+  int? _pendingFormatOffset;
+  int? _pendingFormatBlockIndex;
 
   DocumentController get _docController => widget.documentController;
   Document get _document => _docController.document;
@@ -70,9 +57,9 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_initialized) {
         _initialized = true;
-        widget.callbacks.onInit?.call();
+        widget.editorSettings.onInit?.call();
 
-        if (widget.keyboardSettings.autofocus && _document.blocks.isNotEmpty) {
+        if (widget.editorSettings.autofocus && _document.blocks.isNotEmpty) {
           _focusNodes[_document.blocks[0].id]?.requestFocus();
         }
       }
@@ -112,7 +99,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   /// Notifies the content change callback
   void _notifyContentChanged() {
     final html = _serializer.serialize(_document);
-    widget.callbacks.onChangeContent?.call(html);
+    widget.editorSettings.onChangeContent?.call(html);
   }
 
   /// Called when text in a block changes.
@@ -142,7 +129,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   /// Called when Enter is pressed in a block
   void _onEnter(int blockIndex, int offset) {
-    widget.callbacks.onEnter?.call();
+    widget.editorSettings.onEnter?.call();
 
     final newBlockIndex = _docController.splitBlock(
       blockIndex,
@@ -220,10 +207,8 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   void _onPaste(int blockIndex) async {
     try {
       final reader = await SystemClipboard.instance?.read();
-      debugPrint('PASTE: reader: $reader');
       if (reader != null && reader.canProvide(Formats.htmlText)) {
         final html = await reader.readValue(Formats.htmlText);
-        debugPrint('PASTE HTML:\n$html');
         if (html != null && html.isNotEmpty) {
           final parser = SmartHtmlParser();
           final parsed = parser.parse(html);
@@ -242,10 +227,9 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
         }
       }
 
-      // Fallback: Check if there is plain text, maybe it's a URL or just text
+      // Fallback: Check if there is plain text
       if (reader != null && reader.canProvide(Formats.plainText)) {
         final text = await reader.readValue(Formats.plainText);
-        debugPrint('PASTE PLAIN TEXT:\n$text');
         if (text != null && text.isNotEmpty) {
           // If the text looks like raw HTML and processInputHtml is enabled, parse it
           final isLikelyHtml =
@@ -278,6 +262,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
           rebuild();
         }
       }
+      widget.editorSettings.onPaste?.call();
     } catch (e) {
       debugPrint('Paste error: $e');
     }
@@ -287,19 +272,23 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   void _onFocusChanged(int blockIndex, bool hasFocus) {
     if (hasFocus) {
       _focusedBlockIndex = blockIndex;
-      widget.callbacks.onFocus?.call();
+      widget.editorSettings.onFocus?.call();
 
       KeyboardDoneOverlay.show(context);
 
       // Clear pending format when changing blocks
-      _pendingFormat = null;
+      if (blockIndex != _pendingFormatBlockIndex) {
+        _pendingFormat = null;
+        _pendingFormatOffset = null;
+        _pendingFormatBlockIndex = null;
+      }
 
       // Report current formatting at the cursor
-      final formats = _docController.getFormatAt(blockIndex, 0);
-      widget.callbacks.onChangeSelection?.call(formats);
+      final formats = _getMergedFormats(blockIndex, 0);
+      widget.editorSettings.onChangeSelection?.call(formats);
       widget.onFormatStateChanged?.call(blockIndex, formats);
     } else {
-      widget.callbacks.onBlur?.call();
+      widget.editorSettings.onBlur?.call();
 
       // Delay hiding slightly to prevent flickering when moving between blocks
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -315,17 +304,21 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   void _onSelectionChanged(int blockIndex, int baseOffset, int extentOffset) {
     _focusedBlockIndex = blockIndex;
 
-    // Clear pending format when cursor moves
-    _pendingFormat = null;
+    // Clear pending format when cursor moves significantly
+    if (baseOffset != _pendingFormatOffset || blockIndex != _pendingFormatBlockIndex) {
+      _pendingFormat = null;
+      _pendingFormatOffset = null;
+      _pendingFormatBlockIndex = null;
+    }
 
-    final formats = _docController.getFormatAt(blockIndex, baseOffset);
-    widget.callbacks.onChangeSelection?.call(formats);
+    final formats = _getMergedFormats(blockIndex, baseOffset);
+    widget.editorSettings.onChangeSelection?.call(formats);
     widget.onFormatStateChanged?.call(blockIndex, formats);
   }
 
   /// Sets a pending format for the next typed character.
   /// Called by the toolbar when user toggles Bold/Italic/etc at cursor position.
-  void setPendingFormat(Map<String, bool> formats) {
+  void setPendingFormat(Map<String, dynamic> formats) {
     final blockIndex = _focusedBlockIndex;
 
     // Get the current span's format at cursor position as a base
@@ -336,11 +329,26 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
     _pendingFormat = baseSpan.copyWith(
       text: '', // text will be set when applied
-      isBold: formats['bold'] ?? baseSpan.isBold,
-      isItalic: formats['italic'] ?? baseSpan.isItalic,
-      isUnderline: formats['underline'] ?? baseSpan.isUnderline,
-      isStrikethrough: formats['strikethrough'] ?? baseSpan.isStrikethrough,
+      isBold: (formats['bold'] as bool?) ?? baseSpan.isBold,
+      isItalic: (formats['italic'] as bool?) ?? baseSpan.isItalic,
+      isUnderline: (formats['underline'] as bool?) ?? baseSpan.isUnderline,
+      isStrikethrough:
+          (formats['strikethrough'] as bool?) ?? baseSpan.isStrikethrough,
+      fontFamily: formats.containsKey('fontFamily')
+          ? (formats['fontFamily'] as String?)
+          : baseSpan.fontFamily,
+      fontSize: formats.containsKey('fontSize')
+          ? (formats['fontSize'] as double?)
+          : baseSpan.fontSize,
+      foregroundColor: formats.containsKey('foregroundColor')
+          ? (formats['foregroundColor'] as Color?)
+          : baseSpan.foregroundColor,
+      backgroundColor: formats.containsKey('backgroundColor')
+          ? (formats['backgroundColor'] as Color?)
+          : baseSpan.backgroundColor,
     );
+    _pendingFormatOffset = cursorOffset;
+    _pendingFormatBlockIndex = blockIndex;
   }
 
   /// Determines if dark mode is active
@@ -369,6 +377,14 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
         ?.selection;
   }
 
+  /// Requests focus back to the currently focused block
+  void requestEditorFocus() {
+    if (_focusedBlockIndex >= 0 && _focusedBlockIndex < _document.blocks.length) {
+      final id = _document.blocks[_focusedBlockIndex].id;
+      _focusNodes[id]?.requestFocus();
+    }
+  }
+
   /// Forces a rebuild of all blocks
   void rebuild() {
     setState(() {
@@ -384,27 +400,54 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
                 ?.currentState
                 ?.cursorOffset ??
             0;
-        final formats = _docController.getFormatAt(blockIndex, offset);
+        final formats = _getMergedFormats(blockIndex, offset);
         widget.onFormatStateChanged?.call(blockIndex, formats);
       }
     });
   }
 
+  /// Merges pending format into the state at the given offset
+  Map<String, dynamic> _getMergedFormats(int blockIndex, int offset) {
+    var formats = _docController.getFormatAt(blockIndex, offset);
+
+    // Merge pending format if it exists.
+    if (_pendingFormat != null) {
+      formats['bold'] = _pendingFormat!.isBold;
+      formats['italic'] = _pendingFormat!.isItalic;
+      formats['underline'] = _pendingFormat!.isUnderline;
+      formats['strikethrough'] = _pendingFormat!.isStrikethrough;
+
+      if (_pendingFormat!.foregroundColor != null) {
+        formats['foregroundColor'] = _pendingFormat!.foregroundColor;
+      }
+      if (_pendingFormat!.backgroundColor != null) {
+        formats['backgroundColor'] = _pendingFormat!.backgroundColor;
+      }
+      if (_pendingFormat!.fontSize != null) {
+        formats['fontSize'] = _pendingFormat!.fontSize;
+      }
+      if (_pendingFormat!.fontFamily != null) {
+        formats['fontFamily'] = _pendingFormat!.fontFamily;
+      }
+    }
+    return formats;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = _isDarkMode();
-    final bgColor = widget.styleSettings.editorBackgroundColor ??
+    final bgColor = widget.editorSettings.editorBackgroundColor ??
         (isDark ? const Color(0xFF1E1E1E) : Colors.white);
-    final cursorColor = widget.selectionSettings.cursorColor ??
+    final cursorColor = widget.editorSettings.cursorColor ??
         Theme.of(context).colorScheme.primary;
 
     return Container(
-      decoration: widget.styleSettings.editorDecoration ??
+      decoration: widget.editorSettings.editorDecoration ??
           BoxDecoration(color: bgColor),
       child: SingleChildScrollView(
-        physics: widget.scrollSettings.scrollPhysics,
+        physics: widget.editorSettings.scrollPhysics,
         child: Padding(
-          padding: widget.styleSettings.editorPadding,
+          padding: widget.editorSettings.editorPadding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: List.generate(_document.blocks.length, (index) {
@@ -414,6 +457,10 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
                 block: block,
                 blockIndex: index,
                 focusNode: _focusNodes[block.id]!,
+                editorSettings: widget.editorSettings,
+                pendingFontSize: (index == _focusedBlockIndex)
+                    ? _pendingFormat?.fontSize
+                    : null,
                 onTextChanged: _onTextChanged,
                 onEnter: _onEnter,
                 onBackspaceAtStart: _onBackspaceAtStart,
@@ -425,9 +472,9 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
                     widget.editorSettings.readOnly,
                 hint: index == 0 ? widget.editorSettings.hint : null,
                 cursorColor: cursorColor,
-                cursorWidth: widget.selectionSettings.cursorWidth,
-                cursorRadius: widget.selectionSettings.cursorRadius,
-                selectionColor: widget.selectionSettings.selectionColor,
+                cursorWidth: widget.editorSettings.cursorWidth,
+                cursorRadius: widget.editorSettings.cursorRadius,
+                selectionColor: widget.editorSettings.selectionColor,
                 isDarkMode: isDark,
               );
             }),
