@@ -33,7 +33,7 @@ Add `flutter_smart_editor` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_smart_editor: ^1.1.0
+  flutter_smart_editor: ^2.0.0
 ```
 
 ## 📖 Basic Usage
