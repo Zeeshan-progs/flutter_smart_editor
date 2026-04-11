@@ -509,7 +509,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       _focusedBlockIndex = blockIndex;
       widget.editorSettings.onFocus?.call();
 
-      // KeyboardDoneOverlay.show(context);
+      KeyboardDoneOverlay.show(context);
 
       // Clear pending format when changing blocks
       if (blockIndex != _pendingFormatBlockIndex) {

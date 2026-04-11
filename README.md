@@ -7,6 +7,36 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
 
 `flutter_smart_editor` is a full-featured WYSIWYG editor designed from scratch to eliminate the overhead and bugs associated with WebView-based editors. It provides a premium, Material 3 experience with clean HTML input/output.
 
+## 📌 Table of Contents
+
+- [✨ Features](#-features)
+- [🚀 Getting Started](#-getting-started)
+- [📖 Basic Usage](#-basic-usage)
+- [⚙️ Detailed Configuration](#️-detailed-configuration)
+  - [1. SmartEditorSettings](#1-smarteditorsettings)
+    - [Core & HTML](#core--html)
+    - [Scroll & Layout](#scroll--layout)
+    - [Keyboard](#keyboard)
+    - [Selection & Cursor](#selection--cursor)
+    - [Style & Decoration](#style--decoration)
+    - [Lists & Horizontal Rules](#lists--horizontal-rules)
+    - [Callbacks](#callbacks)
+  - [2. SmartToolbarSettings](#2-smarttoolbarsettings)
+    - [Layout & Position](#layout--position)
+    - [Content](#content)
+    - [Container Styling](#container-styling)
+    - [Button & Text Styling](#button--text-styling)
+    - [Dropdown Styling](#dropdown-styling)
+    - [Interceptors](#interceptors)
+  - [3. Interactive List Customization](#️-interactive-list-customization)
+    - [Enabling the Bullet Picker](#enabling-the-bullet-picker)
+    - [Customizing Available Styles](#customizing-available-styles)
+    - [Custom Serialization Example](#custom-serialization-example)
+- [🏃 Migration Guide](#-migration-guide-v10x--v200)
+- [🛠️ Upcoming Features](#️-upcoming-features)
+- [❓ Troubleshooting](#-troubleshooting)
+- [📄 License](#-license)
+
 ## ✨ Features
 
 ### 🎨 Formatting & Styling
@@ -22,6 +52,8 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
 - **Pure HTML**: Clean output and robust parsing of existing HTML content.
 - **Dynamic Height**: The editor expands as you type and can be limited via `maxLines`.
 - **Native Paste**: Premium clipboard support—paste rich text/HTML from browsers and other apps.
+- **Lists (v2.1+)**: Robust, atomic Bullet and Numbered lists with smart reordering.
+- **Mobile Optimized**: Smart backspace bridge for soft keyboards and accessory bar avoidance.
 - **Undo/Redo**: Built-in history management.
 - **Material 3 Toolbar**: **Scrollable**, **Grid**, or **Expandable** layouts.
 
@@ -33,7 +65,7 @@ Add `flutter_smart_editor` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_smart_editor: ^2.0.0
+  flutter_smart_editor: ^2.1.0
 ```
 
 ## 📖 Basic Usage
@@ -118,6 +150,15 @@ SmartEditor(
 | `editorBackgroundColor` | `Color?` | `null` | Background color of the editing area. |
 | `borderRadius` | `BorderRadius?` | `null` | Rounded corners for the default editor border. |
 
+#### Lists & Horizontal Rules
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxListDepth` | `int` | `3` | Maximum nesting depth for lists (1-5 recommended). |
+| `defaultBulletStyle` | `SmartBulletStyle` | `.filledCircle` | Default bullet shape for unordered lists. |
+| `hrStyle` | `SmartHrStyle` | `(defaults)` | Visual configuration for Horizontal Rule dividers. |
+| `draggableBlockTypes` | `Set<BlockType>` | `null` | Types of blocks that show reordering handles (e.g. `{BlockType.bulletList}`). |
+
 #### Callbacks
 
 | Callback | Signature | Description |
@@ -131,6 +172,41 @@ SmartEditor(
 | `onPaste` | `()` | Triggered when content is pasted into the editor. |
 | `onTagSerialize` | `(Type, Tag, Attr, Styles, Content)` | Custom tag serialization interceptor (see below). |
 | `onKeyUp` / `onKeyDown` | `(String? key)` | Raw key event callbacks. |
+
+### 🛠️ Interactive List Customization
+
+Version 2.1.0 introduces the ability for users to live-change their bullet point symbols (pointers).
+
+#### Enabling the Bullet Picker
+
+To show the bullet style picker in your toolbar, ensure `listStyles` is enabled in your `SmartListButtons` group:
+
+```dart
+SmartToolbarSettings(
+  defaultButtons: [
+    const SmartListButtons(
+      ul: true,
+      ol: true,
+      listStyles: true, // Enables the style picker button
+    ),
+  ],
+)
+```
+
+#### Customizing Available Styles
+
+You can filter which pointers are available to the user:
+
+```dart
+SmartListButtons(
+  listStyles: true,
+  availableStyles: [
+    SmartBulletStyle.filledCircle,
+    SmartBulletStyle.diamond,
+    SmartBulletStyle.star,
+  ],
+)
+```
 
 #### Custom Serialization Example
 
@@ -243,10 +319,20 @@ SmartEditor(
 
 ## 🛠️ Upcoming Features
 
-- [ ] Table Support
-- [ ] Hyperlinks & Media Embeds
-- [ ] Bullet & Numbered Lists
-- [ ] Code Block Syntax Highlighting
+- [ ] **Markdown Shortcuts**: Auto-format headers and lists during typing.
+- [ ] **Find & Replace**: Native search overlay with match highlighting.
+- [ ] **Image Blocks**: Support for network/local images with resize handles.
+- [ ] **Table Support**: Semantic HTML tables with row/column management.
+- [ ] **Code Blocks**: Syntax highlighting for 100+ languages.
+- [ ] **Hyperlinks**: Comprehensive link insertion and management dialogs.
+- [ ] **Focus Mode**: Zen mode for distraction-free writing.
+- [ ] **Live Statistics**: Real-time word, character, and reading time counters.
+- [ ] **Auto-Save**: Background persistence and draft recovery.
+- [ ] **AI Assistant**: context-aware writing improvements and summaries.
+- [ ] **PDF Export**: Generate high-quality PDFs directly from Dart.
+- [ ] **Real-time Sync**: Collaborative editing via WebSocket/CRDT.
+- [ ] **Slash Commands**: Notion-style `/` menu for quick block insertion.
+- [ ] **Mobile Haptics**: Tactile feedback for editing actions.
 
 ## ❓ Troubleshooting
 
