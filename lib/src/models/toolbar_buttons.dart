@@ -32,6 +32,7 @@ class SmartFontButtons extends SmartToolbarGroup {
   final bool underline;
   final bool clearAll;
   final bool strikethrough;
+  final bool fontSize;
 
   const SmartFontButtons({
     this.bold = true,
@@ -39,6 +40,7 @@ class SmartFontButtons extends SmartToolbarGroup {
     this.underline = true,
     this.clearAll = true,
     this.strikethrough = true,
+    this.fontSize = true,
   });
 
   /// Returns the icons for the primary font formatting buttons
@@ -70,15 +72,6 @@ class SmartColorButtons extends SmartToolbarGroup {
   });
 }
 
-/// Font size picker dropdown
-class SmartFontSizeButtons extends SmartToolbarGroup {
-  final bool fontSize;
-
-  const SmartFontSizeButtons({
-    this.fontSize = true,
-  });
-}
-
 /// Font family picker dropdown
 class SmartFontFamilyButtons extends SmartToolbarGroup {
   final bool fontFamily;
@@ -88,16 +81,20 @@ class SmartFontFamilyButtons extends SmartToolbarGroup {
   });
 }
 
-/// List buttons (Bullet list, Numbered list)
+/// List buttons (Bullet list, Numbered list, Horizontal Rule)
 class SmartListButtons extends SmartToolbarGroup {
   final bool ul;
   final bool ol;
+  final bool hr;
   final bool listStyles;
+  final List<SmartBulletStyle>? availableStyles;
 
   const SmartListButtons({
     this.ul = true,
     this.ol = true,
+    this.hr = true,
     this.listStyles = true,
+    this.availableStyles,
   });
 }
 
@@ -116,7 +113,7 @@ class SmartParagraphButtons extends SmartToolbarGroup {
   });
 }
 
-/// Insert buttons (Link, Image, Table, HR, etc.)
+/// Insert buttons (Link, Image, Table, etc.)
 class SmartInsertButtons extends SmartToolbarGroup {
   final bool link;
   final bool picture;
@@ -124,7 +121,6 @@ class SmartInsertButtons extends SmartToolbarGroup {
   final bool video;
   final bool otherFile;
   final bool table;
-  final bool hr;
 
   const SmartInsertButtons({
     this.link = true,
@@ -133,26 +129,19 @@ class SmartInsertButtons extends SmartToolbarGroup {
     this.video = true,
     this.otherFile = false,
     this.table = true,
-    this.hr = true,
   });
 }
 
 /// Miscellaneous buttons (Undo, Redo, Code view, Fullscreen, etc.)
 class SmartOtherButtons extends SmartToolbarGroup {
-  final bool fullscreen;
-  final bool codeview;
   final bool undo;
   final bool redo;
-  final bool help;
   final bool copy;
   final bool paste;
 
   const SmartOtherButtons({
-    this.fullscreen = true,
-    this.codeview = true,
     this.undo = true,
     this.redo = true,
-    this.help = true,
     this.copy = true,
     this.paste = true,
   });

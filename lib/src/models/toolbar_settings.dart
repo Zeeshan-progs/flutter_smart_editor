@@ -24,17 +24,14 @@ class SmartToolbarSettings {
     this.defaultButtons = const [
       SmartStyleButtons(),
       SmartFontButtons(clearAll: false),
+      SmartListButtons(hr: true),
       SmartInsertButtons(
+        link: false,
+        picture: false,
         audio: false,
         video: false,
         table: false,
-        hr: false,
         otherFile: false,
-      ),
-      SmartOtherButtons(
-        fullscreen: false,
-        codeview: false,
-        help: false,
       ),
     ],
     this.customButtons = const [],

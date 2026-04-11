@@ -90,7 +90,7 @@ void main() {
   group('Formatting', () {
     test('toggles bold on a range', () {
       controller.insertText(0, 0, 'Hello World');
-      controller.toggleFormat(0, 0, 5, 'bold');
+      controller.toggleFormat(0, 0, 5, SmartButtonType.bold);
 
       // The first span(s) covering [0,5) should be bold
       final spans = controller.document.blocks[0].spans;
@@ -102,7 +102,7 @@ void main() {
       controller.document.blocks[0].spans = [
         TextFormatSpan(text: 'Hello', isBold: true),
       ];
-      controller.toggleFormat(0, 0, 5, 'bold');
+      controller.toggleFormat(0, 0, 5, SmartButtonType.bold);
 
       expect(controller.document.blocks[0].spans[0].isBold, false);
     });
@@ -113,9 +113,9 @@ void main() {
       ];
 
       final format = controller.getFormatAt(0, 2);
-      expect(format['bold'], true);
-      expect(format['italic'], true);
-      expect(format['underline'], false);
+      expect(format[SmartButtonType.bold], true);
+      expect(format[SmartButtonType.italic], true);
+      expect(format[SmartButtonType.underline], false);
     });
   });
 
@@ -173,7 +173,7 @@ void main() {
   group('Phase 2: Extended Formatting', () {
     test('applies font family to range', () {
       controller.insertText(0, 0, 'Hello World');
-      controller.applyFormat(0, 0, 5, 'fontFamily', 'Roboto');
+      controller.applyFormat(0, 0, 5, SmartButtonType.fontName, 'Roboto');
 
       final spans = controller.document.blocks[0].spans;
       expect(spans[0].fontFamily, 'Roboto');
@@ -183,7 +183,7 @@ void main() {
 
     test('applies font size to range', () {
       controller.insertText(0, 0, 'Hello World');
-      controller.applyFormat(0, 0, 5, 'fontSize', 18.0);
+      controller.applyFormat(0, 0, 5, SmartButtonType.fontSize, 18.0);
 
       final spans = controller.document.blocks[0].spans;
       expect(spans[0].fontSize, 18.0);
@@ -193,16 +193,27 @@ void main() {
     test('applies foreground color to range', () {
       const testColor = Color(0xFFFF0000); // Red
       controller.insertText(0, 0, 'Hello World');
-      controller.applyFormat(0, 0, 5, 'foregroundColor', testColor);
+      controller.applyFormat(0, 0, 5, SmartButtonType.foregroundColor, testColor);
 
       final spans = controller.document.blocks[0].spans;
       expect(spans[0].foregroundColor, testColor);
     });
 
+    test('clears foreground color on range when value is null', () {
+      const testColor = Color(0xFFFF0000);
+      controller.insertText(0, 0, 'Hello World');
+      controller.applyFormat(0, 0, 5, SmartButtonType.foregroundColor, testColor);
+      controller.applyFormat(0, 0, 5, SmartButtonType.foregroundColor, null);
+
+      final spans = controller.document.blocks[0].spans;
+      final helloSpan = spans.firstWhere((s) => s.text.startsWith('Hello'));
+      expect(helloSpan.foregroundColor, isNull);
+    });
+
     test('applies background color to range', () {
       const testColor = Color(0xFF00FF00); // Green
       controller.insertText(0, 0, 'Hello World');
-      controller.applyFormat(0, 0, 5, 'backgroundColor', testColor);
+      controller.applyFormat(0, 0, 5, SmartButtonType.highlightColor, testColor);
 
       final spans = controller.document.blocks[0].spans;
       expect(spans[0].backgroundColor, testColor);

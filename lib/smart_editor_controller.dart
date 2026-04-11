@@ -31,8 +31,8 @@ class SmartEditorController extends ChangeNotifier {
   }) {
     _documentController = DocumentController(
       undoRedoManager: _undoRedoManager,
-      onDocumentChanged: _onDocumentChanged,
     );
+    _documentController.addListener(_onDocumentChanged);
   }
 
   final bool processInputHtml;
@@ -139,18 +139,18 @@ class SmartEditorController extends ChangeNotifier {
   // ─── Formatting Methods ───────────────────────────────────────
 
   /// Toggles bold on the current selection.
-  void toggleBold() => _toggleFormat('bold');
+  void toggleBold() => _toggleFormat(SmartButtonType.bold);
 
   /// Toggles italic on the current selection.
-  void toggleItalic() => _toggleFormat('italic');
+  void toggleItalic() => _toggleFormat(SmartButtonType.italic);
 
   /// Toggles underline on the current selection.
-  void toggleUnderline() => _toggleFormat('underline');
+  void toggleUnderline() => _toggleFormat(SmartButtonType.underline);
 
   /// Toggles strikethrough on the current selection.
-  void toggleStrikethrough() => _toggleFormat('strikethrough');
+  void toggleStrikethrough() => _toggleFormat(SmartButtonType.strikethrough);
 
-  void _toggleFormat(String format) {
+  void _toggleFormat(SmartButtonType format) {
     final blockIndex = _editorWidgetState?.focusedBlockIndex ?? 0;
     final selection = _editorWidgetState?.selection;
     if (selection == null || selection.isCollapsed) return;

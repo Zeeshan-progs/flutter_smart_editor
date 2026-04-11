@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_editor/smart_editor.dart';
 import 'package:flutter_smart_editor/src/widgets/smart_editor_widget.dart';
+import 'package:flutter_smart_editor/src/models/enums.dart';
 
 void main() {
   testWidgets('Selecting text and toggling bold instantly updates UI',
@@ -23,8 +24,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Select "World"
-    controller.documentController.toggleFormat(0, 6, 11, 'bold');
+    // Try to make "World" (index 6 to 11) bold
+    controller.documentController.toggleFormat(0, 6, 11, SmartButtonType.bold);
     tester
         .state<SmartEditorWidgetState>(find.byType(SmartEditorWidget))
         .rebuild();

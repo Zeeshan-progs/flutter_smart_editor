@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_smart_editor/src/core/document_controller.dart';
 import 'package:flutter_smart_editor/src/core/document.dart';
+import 'package:flutter_smart_editor/src/models/enums.dart';
 
 void main() {
   test('toggleFormat applies bold to exactly the selected range', () {
@@ -10,8 +11,7 @@ void main() {
     controller.document.blocks.add(block);
 
     // Try to make "World" (index 6 to 11) bold
-    controller.toggleFormat(0, 6, 11, 'bold');
-
+    controller.toggleFormat(0, 6, 11, SmartButtonType.bold);
     final spans = controller.document.blocks[0].spans;
     print('After formatting 6-11: $spans');
 

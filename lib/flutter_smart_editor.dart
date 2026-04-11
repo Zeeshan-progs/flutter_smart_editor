@@ -17,5 +17,7 @@ export 'src/models/toolbar_buttons.dart';
 // Enums
 export 'src/models/enums.dart';
 
+export 'src/models/pending_inline_format.dart';
+
 // Document model (for advanced usage)
 export 'src/core/document.dart';

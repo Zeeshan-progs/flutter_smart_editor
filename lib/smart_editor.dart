@@ -4,6 +4,7 @@ import 'src/core/html_parser.dart';
 import 'src/models/editor_settings.dart';
 import 'src/models/toolbar_settings.dart';
 import 'src/models/enums.dart';
+import 'src/models/pending_inline_format.dart';
 import 'src/widgets/smart_editor_widget.dart';
 import 'src/widgets/smart_toolbar_widget.dart';
 
@@ -106,14 +107,13 @@ class _SmartEditorState extends State<SmartEditor> {
   }
 
   /// Called when format state changes in the editor
-  void _onFormatStateChanged(int blockIndex, Map<String, dynamic> formats) {
+  void _onFormatStateChanged(int blockIndex, Map<SmartButtonType, dynamic> formats) {
     _toolbarKey.currentState?.updateFormatState(blockIndex, formats);
   }
 
-  /// Called when the toolbar toggles a format at cursor (no selection).
-  /// Sets the pending format so the next typed character gets that format.
-  void _onPendingFormatChanged(Map<String, dynamic> formats) {
-    _editorKey.currentState?.setPendingFormat(formats);
+  /// Called when the toolbar sets pending inline style at the caret.
+  void _onPendingFormatChanged(PendingInlineFormat format) {
+    _editorKey.currentState?.setPendingInlineFormat(format);
   }
 
   /// Called when toolbar wants focus back on the editor
@@ -142,10 +142,12 @@ class _SmartEditorState extends State<SmartEditor> {
                 settings: widget.toolbarSettings,
                 getFocusedBlockIndex: () =>
                     _editorKey.currentState?.focusedBlockIndex ?? 0,
-                getSelection: () => _editorKey.currentState?.selection,
+                getSelection: () => _editorKey.currentState?.selectionForToolbar,
                 onFormatApplied: _onFormatApplied,
                 onPendingFormatChanged: _onPendingFormatChanged,
                 onFocusRequested: _onFocusRequested,
+                getMergedFormatsForToolbar: () =>
+                    _editorKey.currentState?.getToolbarFormatState() ?? {},
                 isDarkMode: isDark,
               )
             : null;
