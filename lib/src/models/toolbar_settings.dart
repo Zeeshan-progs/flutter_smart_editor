@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'enums.dart';
-import 'toolbar_buttons.dart';
+import 'toolbar/toolbar_index.dart';
 
 /// Comprehensive settings for the toolbar's behavior, layout, and style.
 ///
@@ -24,17 +24,14 @@ class SmartToolbarSettings {
     this.defaultButtons = const [
       SmartStyleButtons(),
       SmartFontButtons(clearAll: false),
+      SmartListButtons(hr: true),
       SmartInsertButtons(
+        link: false,
+        picture: false,
         audio: false,
         video: false,
         table: false,
-        hr: false,
         otherFile: false,
-      ),
-      SmartOtherButtons(
-        fullscreen: false,
-        codeview: false,
-        help: false,
       ),
     ],
     this.customButtons = const [],

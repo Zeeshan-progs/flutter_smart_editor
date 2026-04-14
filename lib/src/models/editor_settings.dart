@@ -62,6 +62,12 @@ class SmartEditorSettings {
     this.onKeyDown,
     this.onPaste,
     this.onTagSerialize,
+
+    // Lists & HR
+    this.maxListDepth = 3,
+    this.defaultBulletStyle = SmartBulletStyle.filledCircle,
+    this.hrStyle = const SmartHrStyle(),
+    this.draggableBlockTypes,
   });
 
   // ─── Core & HTML ──────────────────────────────────────────────
@@ -179,7 +185,7 @@ class SmartEditorSettings {
   final void Function(String?)? onChangeContent;
 
   /// Called whenever the cursor position or selection changes
-  final void Function(Map<String, dynamic>)? onChangeSelection;
+  final void Function(Map<SmartButtonType, dynamic>)? onChangeSelection;
 
   /// Called when the editor gains focus
   final void Function()? onFocus;
@@ -211,4 +217,44 @@ class SmartEditorSettings {
           Map<String, String> styles,
           String content)?
       onTagSerialize;
+
+  // ─── Lists & HR ───────────────────────────────────────────────
+
+  /// Maximum nesting depth for lists. Defaults to 3.
+  /// Set higher (e.g. 5) if deeper nesting is needed.
+  final int maxListDepth;
+
+  /// Default bullet shape for unordered lists.
+  /// Can be overridden per-list via the toolbar bullet style picker.
+  final SmartBulletStyle defaultBulletStyle;
+
+  /// Styling configuration for the horizontal rule (`<hr>`) divider.
+  final SmartHrStyle hrStyle;
+
+  /// Set of block types that are allowed to be dragged to reposition.
+  /// If null or empty, no blocks can be dragged.
+  /// Example: {BlockType.horizontalRule, BlockType.heading1}
+  final Set<BlockType>? draggableBlockTypes;
+}
+
+/// Styling configuration for the `<hr>` horizontal rule block.
+class SmartHrStyle {
+  /// Color of the divider line. Defaults to the theme's divider color.
+  final Color? color;
+
+  /// Thickness of the divider line in logical pixels. Defaults to 1.0.
+  final double thickness;
+
+  /// Vertical space above and below the divider. Defaults to 8.0.
+  final double verticalSpacing;
+
+  /// Border radius for rounded dividers. Defaults to null (no rounding).
+  final BorderRadius? borderRadius;
+
+  const SmartHrStyle({
+    this.color,
+    this.thickness = 1.0,
+    this.verticalSpacing = 8.0,
+    this.borderRadius,
+  });
 }

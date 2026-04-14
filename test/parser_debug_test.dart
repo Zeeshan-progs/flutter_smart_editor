@@ -1,4 +1,4 @@
-import 'package:flutter_smart_editor/src/core/html_parser.dart';
+import 'package:flutter_smart_editor/src/core/infra/html_parser.dart';
 
 void main() {
   final parser = SmartHtmlParser();

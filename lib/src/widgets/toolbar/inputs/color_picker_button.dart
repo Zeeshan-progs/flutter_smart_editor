@@ -90,7 +90,7 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
               bottom: 0,
               child: Container(
                 height: 4,
-                width: 16,
+                width: 22,
                 color: widget.enabled
                     ? widget.currentColor
                     : Theme.of(context).disabledColor,

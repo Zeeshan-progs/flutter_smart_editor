@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_smart_editor/src/core/document.dart';
-import 'package:flutter_smart_editor/src/core/html_parser.dart';
+import 'package:flutter_smart_editor/src/core/document/document.dart';
+import 'package:flutter_smart_editor/src/core/infra/html_parser.dart';
 import 'package:flutter_smart_editor/src/models/enums.dart';
 
 void main() {

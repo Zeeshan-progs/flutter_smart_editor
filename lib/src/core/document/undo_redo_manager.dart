@@ -1,4 +1,6 @@
-import '../core/document.dart';
+import 'package:flutter_smart_editor/src/core/document/document.dart';
+
+
 
 /// Manages an undo/redo stack of [Document] snapshots.
 ///

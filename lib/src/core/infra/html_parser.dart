@@ -1,8 +1,8 @@
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:flutter/painting.dart';
-import '../core/document.dart';
-import '../models/enums.dart';
+import '../document/document.dart';
+import '../../models/enums.dart';
 
 /// Parses an HTML string into a [Document] tree.
 ///
@@ -59,10 +59,26 @@ class SmartHtmlParser {
     final element = node;
     final tag = element.localName?.toLowerCase() ?? '';
 
+    // List containers
+    if (tag == 'ul') {
+      _processListElement(element, blocks, SmartListType.bullet, 0, null);
+      return;
+    }
+    if (tag == 'ol') {
+      _processListElement(element, blocks, SmartListType.ordered, 0, null);
+      return;
+    }
+
+    // Horizontal rule
+    if (tag == 'hr') {
+      blocks.add(HorizontalRuleNode());
+      return;
+    }
+
     // Handle block-level elements
     if (_isBlockTag(tag)) {
       final block = _createBlock(tag, element);
-      blocks.add(block);
+      if (block != null) blocks.add(block);
     } else if (tag == 'br') {
       // A standalone <br> creates an empty paragraph
       blocks.add(ParagraphNode());
@@ -79,19 +95,22 @@ class SmartHtmlParser {
   /// Returns true if the tag is a block-level element
   bool _isBlockTag(String tag) {
     return const {
-      'p',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'div',
+      'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div',
+      'ul', 'ol', 'hr',
     }.contains(tag);
   }
 
   /// Creates a [BlockNode] from a block-level DOM element
-  BlockNode _createBlock(String tag, dom.Element element) {
+  BlockNode? _createBlock(String tag, dom.Element element) {
+    // Horizontal rule
+    if (tag == 'hr') return HorizontalRuleNode();
+
+    // List containers — recurse into children
+    if (tag == 'ul' || tag == 'ol') {
+      // Return null; children are handled by _processListElement
+      return null;
+    }
+
     final spans = <TextFormatSpan>[];
     _extractInlineSpans(element, spans, _InlineFormat());
 
@@ -116,6 +135,88 @@ class SmartHtmlParser {
     }
 
     return ParagraphNode(spans: spans, alignment: alignment);
+  }
+
+  /// Recursively processes a <ul> or <ol> element, extracting list items with correct depth
+  void _processListElement(
+    dom.Element listElement,
+    List<BlockNode> blocks,
+    SmartListType listType,
+    int depth,
+    SmartBulletStyle? bulletStyle,
+  ) {
+    // Read list-style-type from style attribute if present
+    SmartBulletStyle? parsedStyle = bulletStyle;
+    final style = listElement.attributes['style'] ?? '';
+    if (style.isNotEmpty && listType == SmartListType.bullet) {
+      parsedStyle = _parseBulletStyle(style) ?? bulletStyle;
+    }
+
+    for (final child in listElement.children) {
+      final childTag = child.localName?.toLowerCase() ?? '';
+      if (childTag == 'li') {
+        // Collect inline spans from direct text/inline children of this <li>
+        final spans = <TextFormatSpan>[];
+        for (final node in child.nodes) {
+          if (node is dom.Element) {
+            final nodeTag = node.localName?.toLowerCase() ?? '';
+            if (nodeTag == 'ul') {
+              // Flush any spans collected so far as a list item
+              if (spans.isNotEmpty || blocks.isEmpty || blocks.last is! ListItemNode) {
+                blocks.add(ListItemNode(
+                  listType: listType,
+                  depth: depth,
+                  bulletStyle: parsedStyle,
+                  spans: spans.isEmpty ? [TextFormatSpan.plain('')] : spans,
+                ));
+                spans.clear();
+              }
+              _processListElement(node, blocks, SmartListType.bullet, depth + 1, parsedStyle);
+            } else if (nodeTag == 'ol') {
+              if (spans.isNotEmpty || blocks.isEmpty || blocks.last is! ListItemNode) {
+                blocks.add(ListItemNode(
+                  listType: listType,
+                  depth: depth,
+                  bulletStyle: parsedStyle,
+                  spans: spans.isEmpty ? [TextFormatSpan.plain('')] : spans,
+                ));
+                spans.clear();
+              }
+              _processListElement(node, blocks, SmartListType.ordered, depth + 1, null);
+            } else {
+              _extractInlineSpans(node, spans, _InlineFormat());
+            }
+          } else {
+            _extractInlineSpans(node, spans, _InlineFormat());
+          }
+        }
+
+        // Emit list item for any remaining spans
+        if (spans.isNotEmpty || true) {
+          final trimmedSpans = spans.isEmpty ? [TextFormatSpan.plain('')] : spans;
+          blocks.add(ListItemNode(
+            listType: listType,
+            depth: depth,
+            bulletStyle: parsedStyle,
+            spans: trimmedSpans,
+          ));
+        }
+      }
+    }
+  }
+
+  SmartBulletStyle? _parseBulletStyle(String style) {
+    if (style.contains('disc')) return SmartBulletStyle.filledCircle;
+    if (style.contains('circle')) return SmartBulletStyle.hollowCircle;
+    if (style.contains('square')) return SmartBulletStyle.filledSquare;
+    if (style.contains('\u25a1') || style.contains('hollowSquare')) return SmartBulletStyle.hollowSquare;
+    if (style.contains('\u25c6') || style.contains('\u25c7')) return SmartBulletStyle.diamond;
+    if (style.contains('\u2192')) return SmartBulletStyle.arrow;
+    if (style.contains('\u2013') || style.contains('dash')) return SmartBulletStyle.dash;
+    if (style.contains('\u2605')) return SmartBulletStyle.star;
+    if (style.contains('\u2713')) return SmartBulletStyle.checkmark;
+    if (style.contains('\u25b6')) return SmartBulletStyle.triangle;
+    return null;
   }
 
   /// Parses the text-align style from an element

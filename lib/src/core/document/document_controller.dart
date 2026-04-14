@@ -1,24 +1,53 @@
-import 'package:flutter/painting.dart';
-import '../core/document.dart';
-import '../core/undo_redo_manager.dart';
-import '../models/enums.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_smart_editor/src/core/document/document.dart';
+import '../../models/enums.dart';
+import '../infra/html_parser.dart';
+import '../infra/html_serializer.dart';
+import 'undo_redo_manager.dart';
 
 /// Editing operations on the [Document] model.
 ///
 /// This is the internal engine that performs text insertion, deletion,
 /// formatting toggles, block splitting/merging, and block type changes.
 /// All operations modify the document in place and push undo states.
-class DocumentController {
+class DocumentController extends ChangeNotifier {
   Document document;
   final UndoRedoManager undoRedoManager;
-  final VoidCallback? onDocumentChanged;
 
   DocumentController({
     Document? document,
     UndoRedoManager? undoRedoManager,
-    this.onDocumentChanged,
   })  : document = document ?? Document(),
         undoRedoManager = undoRedoManager ?? UndoRedoManager();
+
+  /// Callback for providing user feedback (e.g., SnackBars).
+  void Function(String message)? onMessage;
+
+  /// Gets the HTML for a specific selection range within a block.
+  String getSelectedHtml(int blockIndex, TextSelection selection) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return '';
+    final block = document.blocks[blockIndex];
+    if (selection.isCollapsed) return '';
+
+    final start = selection.start;
+    final end = selection.end;
+
+    // Create a temporary block to serialize just the selection
+    final tempBlock = block.deepCopy();
+    _deleteFromSpans(tempBlock, end, tempBlock.textLength - end);
+    _deleteFromSpans(tempBlock, 0, start);
+
+    final tempDoc = Document(blocks: [tempBlock]);
+    return SmartHtmlSerializer().serialize(tempDoc);
+  }
+
+  /// Gets the plain text for a specific selection range within a block.
+  String getSelectedPlainText(int blockIndex, TextSelection selection) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return '';
+    final block = document.blocks[blockIndex];
+    if (selection.isCollapsed) return '';
+    return block.plainText.substring(selection.start, selection.end);
+  }
 
   /// Saves the current state before making a change
   void _saveState() {
@@ -28,7 +57,32 @@ class DocumentController {
   /// Notifies listeners that the document changed
   void _notifyChanged() {
     document.normalize();
-    onDocumentChanged?.call();
+    notifyListeners();
+  }
+
+  /// Restoration method for undo/redo
+  void _restoreState(Document state) {
+    document = state;
+    _notifyChanged();
+  }
+
+  // ─── History Operations ───────────────────────────────────────
+
+  bool get canUndo => undoRedoManager.canUndo;
+  bool get canRedo => undoRedoManager.canRedo;
+
+  void undo() {
+    final state = undoRedoManager.undo(document);
+    if (state != null) {
+      _restoreState(state);
+    }
+  }
+
+  void redo() {
+    final state = undoRedoManager.redo(document);
+    if (state != null) {
+      _restoreState(state);
+    }
   }
 
   // ─── Text Operations ──────────────────────────────────────────
@@ -303,7 +357,8 @@ class DocumentController {
 
   // ─── Formatting Operations ────────────────────────────────────
 
-  void toggleFormat(int blockIndex, int start, int end, String format) {
+  void toggleFormat(
+      int blockIndex, int start, int end, SmartButtonType format) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     if (start >= end) return;
     _saveState();
@@ -335,8 +390,8 @@ class DocumentController {
     _notifyChanged();
   }
 
-  void applyFormat(
-      int blockIndex, int start, int end, String format, dynamic value) {
+  void applyFormat(int blockIndex, int start, int end, SmartButtonType format,
+      dynamic value) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     if (start >= end) return;
     _saveState();
@@ -356,7 +411,7 @@ class DocumentController {
     _notifyChanged();
   }
 
-  Map<String, dynamic> getFormatAt(int blockIndex, int offset) {
+  Map<SmartButtonType, dynamic> getFormatAt(int blockIndex, int offset) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) {
       return _defaultFormat();
     }
@@ -370,80 +425,94 @@ class DocumentController {
     final span = block.spans[loc.spanIndex];
 
     return {
-      'bold': span.isBold,
-      'italic': span.isItalic,
-      'underline': span.isUnderline,
-      'strikethrough': span.isStrikethrough,
-      'fontFamily': span.fontFamily,
-      'fontSize': span.fontSize,
-      'foregroundColor': span.foregroundColor,
-      'backgroundColor': span.backgroundColor,
-      'alignment': block.alignment,
+      SmartButtonType.bold: span.isBold,
+      SmartButtonType.italic: span.isItalic,
+      SmartButtonType.underline: span.isUnderline,
+      SmartButtonType.strikethrough: span.isStrikethrough,
+      SmartButtonType.fontName: span.fontFamily,
+      SmartButtonType.fontSize: span.fontSize,
+      SmartButtonType.foregroundColor: span.foregroundColor,
+      SmartButtonType.highlightColor: span.backgroundColor,
+      SmartButtonType.alignLeft: block.alignment == SmartTextAlign.left,
+      SmartButtonType.alignCenter: block.alignment == SmartTextAlign.center,
+      SmartButtonType.alignRight: block.alignment == SmartTextAlign.right,
+      SmartButtonType.alignJustify: block.alignment == SmartTextAlign.justify,
+      SmartButtonType.blockType: block.blockType,
     };
   }
 
-  Map<String, dynamic> _defaultFormat() => {
-        'bold': false,
-        'italic': false,
-        'underline': false,
-        'strikethrough': false,
-        'superscript': false,
-        'subscript': false,
-        'fontFamily': null,
-        'fontSize': null,
-        'foregroundColor': null,
-        'backgroundColor': null,
-        'alignment': SmartTextAlign.left,
+  Map<SmartButtonType, dynamic> _defaultFormat() => {
+        SmartButtonType.bold: false,
+        SmartButtonType.italic: false,
+        SmartButtonType.underline: false,
+        SmartButtonType.strikethrough: false,
+        SmartButtonType.fontName: null,
+        SmartButtonType.fontSize: null,
+        SmartButtonType.foregroundColor: null,
+        SmartButtonType.highlightColor: null,
+        SmartButtonType.alignLeft: true,
       };
 
-  dynamic _getFormat(TextFormatSpan span, String format) {
+  dynamic _getFormat(TextFormatSpan span, SmartButtonType format) {
     switch (format) {
-      case 'bold':
+      case SmartButtonType.bold:
         return span.isBold;
-      case 'italic':
+      case SmartButtonType.italic:
         return span.isItalic;
-      case 'underline':
+      case SmartButtonType.underline:
         return span.isUnderline;
-      case 'strikethrough':
+      case SmartButtonType.strikethrough:
         return span.isStrikethrough;
-      case 'fontFamily':
+      case SmartButtonType.fontName:
         return span.fontFamily;
-      case 'fontSize':
+      case SmartButtonType.fontSize:
         return span.fontSize;
-      case 'foregroundColor':
+      case SmartButtonType.foregroundColor:
         return span.foregroundColor;
-      case 'backgroundColor':
+      case SmartButtonType.highlightColor:
         return span.backgroundColor;
       default:
         return null;
     }
   }
 
-  void _setFormat(TextFormatSpan span, String format, dynamic value) {
+  void _setFormat(TextFormatSpan span, SmartButtonType format, dynamic value) {
     switch (format) {
-      case 'bold':
+      case SmartButtonType.bold:
         span.isBold = value as bool;
         break;
-      case 'italic':
+      case SmartButtonType.italic:
         span.isItalic = value as bool;
         break;
-      case 'underline':
+      case SmartButtonType.underline:
         span.isUnderline = value as bool;
         break;
-      case 'strikethrough':
+      case SmartButtonType.strikethrough:
         span.isStrikethrough = value as bool;
         break;
-      case 'fontFamily':
+      case SmartButtonType.fontName:
         span.fontFamily = value as String?;
         break;
-      case 'fontSize':
+      case SmartButtonType.fontSize:
         span.fontSize = value as double?;
         break;
-      case 'foregroundColor':
+      case SmartButtonType.foregroundColor:
         span.foregroundColor = value;
         break;
-      case 'backgroundColor':
+      case SmartButtonType.highlightColor:
         span.backgroundColor = value;
+        break;
+      case SmartButtonType.clearFormatting:
+        span.isBold = false;
+        span.isItalic = false;
+        span.isUnderline = false;
+        span.isStrikethrough = false;
+        span.fontFamily = null;
+        span.fontSize = null;
+        span.foregroundColor = null;
+        span.backgroundColor = null;
+        break;
+      default:
         break;
     }
   }
@@ -514,10 +583,24 @@ class DocumentController {
 
   int mergeWithPrevious(int blockIndex) {
     if (blockIndex <= 0 || blockIndex >= document.blocks.length) return 0;
-    _saveState();
 
     final previous = document.blocks[blockIndex - 1];
     final current = document.blocks[blockIndex];
+
+    // Don't merge text into non-text blocks like HR
+    if (previous is HorizontalRuleNode || current is HorizontalRuleNode) {
+      if (current.textLength == 0) {
+        // Just delete the empty block
+        _saveState();
+        document.blocks.removeAt(blockIndex);
+        _notifyChanged();
+        return 0;
+      }
+      return 0;
+    }
+
+    _saveState();
+
     final cursorOffset = previous.textLength;
 
     previous.spans.addAll(current.spans);
@@ -566,9 +649,178 @@ class DocumentController {
         newBlock =
             HeadingNode(id: id, level: 6, spans: spans, alignment: alignment);
         break;
+      case BlockType.bulletList:
+        newBlock = ListItemNode(
+            id: id,
+            listType: SmartListType.bullet,
+            spans: spans,
+            alignment: alignment);
+        break;
+      case BlockType.orderedList:
+        newBlock = ListItemNode(
+            id: id,
+            listType: SmartListType.ordered,
+            spans: spans,
+            alignment: alignment);
+        break;
+      case BlockType.horizontalRule:
+        newBlock = HorizontalRuleNode(id: id);
+        break;
     }
 
     document.blocks[blockIndex] = newBlock;
+    _notifyChanged();
+  }
+
+  // ─── List Operations ──────────────────────────────────────────
+
+  /// Toggles a list type on the block at [blockIndex].
+  /// - If already a list of the same type → reverts to paragraph.
+  /// - If a list of the other type → switches type, preserving depth.
+  /// - Otherwise → converts to a list item at depth 0.
+  void toggleList(int blockIndex, SmartListType listType) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    _saveState();
+
+    final block = document.blocks[blockIndex];
+
+    if (block is ListItemNode) {
+      if (block.listType == listType) {
+        // Same type: exit list
+        document.blocks[blockIndex] = ParagraphNode(
+            id: block.id, spans: block.spans, alignment: block.alignment);
+      } else {
+        // Different type: switch type, keep depth
+        document.blocks[blockIndex] = ListItemNode(
+          id: block.id,
+          listType: listType,
+          depth: block.depth,
+          bulletStyle: block.bulletStyle,
+          spans: block.spans,
+          alignment: block.alignment,
+        );
+      }
+    } else {
+      // Convert to list item at depth 0
+      document.blocks[blockIndex] = ListItemNode(
+        id: block.id,
+        listType: listType,
+        depth: 0,
+        spans: block.spans,
+        alignment: block.alignment,
+      );
+    }
+
+    _notifyChanged();
+  }
+
+  /// Increases the nesting depth of the list item at [blockIndex].
+  /// No-op if already at [maxDepth] or block is not a [ListItemNode].
+  void increaseIndent(int blockIndex, {int maxDepth = 3}) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! ListItemNode) return;
+    if (block.depth >= maxDepth - 1) return;
+    _saveState();
+    document.blocks[blockIndex] = block.copyWithDepth(block.depth + 1);
+    _notifyChanged();
+  }
+
+  /// Decreases the nesting depth of the list item at [blockIndex].
+  /// If depth is already 0, converts the item to a [ParagraphNode].
+  void decreaseIndent(int blockIndex) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! ListItemNode) return;
+    _saveState();
+    if (block.depth <= 0) {
+      document.blocks[blockIndex] = ParagraphNode(
+          id: block.id, spans: block.spans, alignment: block.alignment);
+    } else {
+      document.blocks[blockIndex] = block.copyWithDepth(block.depth - 1);
+    }
+    _notifyChanged();
+  }
+
+  /// Applies a custom [SmartBulletStyle] to all list items in the same
+  /// contiguous group as [blockIndex].
+  void setBulletStyle(int blockIndex, SmartBulletStyle style) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! ListItemNode || block.listType != SmartListType.bullet) {
+      return;
+    }
+    _saveState();
+
+    // Find start of this contiguous group at depth 0
+    int start = blockIndex;
+    while (start > 0 && document.blocks[start - 1] is ListItemNode) {
+      start--;
+    }
+    int end = blockIndex;
+    while (end < document.blocks.length - 1 &&
+        document.blocks[end + 1] is ListItemNode) {
+      end++;
+    }
+
+    for (var i = start; i <= end; i++) {
+      final b = document.blocks[i];
+      if (b is ListItemNode && b.listType == SmartListType.bullet) {
+        document.blocks[i] = b.copyWithBulletStyle(style);
+      }
+    }
+    _notifyChanged();
+  }
+
+  /// Inserts a [HorizontalRuleNode] after the block at [blockIndex].
+  /// Also inserts an empty paragraph after the HR so the cursor can continue.
+  void insertHorizontalRule(int blockIndex) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    _saveState();
+    final hr = HorizontalRuleNode();
+    final para = ParagraphNode();
+    document.blocks.insertAll(blockIndex + 1, [hr, para]);
+    _notifyChanged();
+  }
+
+  /// Moves the block at [fromIndex] to [toIndex] (for drag-and-drop).
+  void moveBlock(int fromIndex, int toIndex) {
+    moveBlockRange(fromIndex, 1, toIndex);
+  }
+
+  /// Moves a range of blocks starting at [fromIndex] to [toIndex].
+  void moveBlockRange(int fromIndex, int count, int toIndex) {
+    if (fromIndex < 0 || toIndex < 0 || count <= 0) return;
+    if (fromIndex + count > document.blocks.length) return;
+
+    if (fromIndex == toIndex) return;
+
+    _saveState();
+
+    // 1. Extract the blocks to move
+    final movedBlocks = <BlockNode>[];
+    for (var i = 0; i < count; i++) {
+      movedBlocks.add(document.blocks[fromIndex + i]);
+    }
+
+    // 2. Remove from original position
+    // We remove them in reverse to avoid index issues if we were doing it one by one,
+    // but here we can just use removeRange.
+    document.blocks.removeRange(fromIndex, fromIndex + count);
+
+    // 3. Adjust target index if we removed items from BEFORE it
+    int insertAt = toIndex;
+    if (fromIndex < toIndex) {
+      insertAt -= count;
+    }
+
+    // 4. Boundary check for insertion
+    if (insertAt < 0) insertAt = 0;
+    if (insertAt > document.blocks.length) insertAt = document.blocks.length;
+
+    // 5. Insert at new position
+    document.blocks.insertAll(insertAt, movedBlocks);
+
     _notifyChanged();
   }
 
@@ -635,23 +887,53 @@ class DocumentController {
     _notifyChanged();
   }
 
-  void undo() {
-    if (undoRedoManager.canUndo) {
-      final doc = undoRedoManager.undo(document);
-      if (doc != null) {
-        document = doc;
-        onDocumentChanged?.call();
+  // ─── Clipboard Operations ─────────────────────────────────────
+
+  /// Serializes the selected range within a block to HTML.
+  String getSelectedHtml(int blockIndex, TextSelection selection) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return '';
+    if (selection.isCollapsed) return '';
+
+    final block = document.blocks[blockIndex];
+    final start = selection.start;
+    final end = selection.end;
+
+    // Create a temporary block with only the selected spans
+    final selectedSpans = <TextFormatSpan>[];
+    var offset = 0;
+
+    for (var span in block.spans) {
+      final spanLen = span.text.length;
+      final spanStart = offset;
+      final spanEnd = offset + spanLen;
+
+      final intersectStart = spanStart > start ? spanStart : start;
+      final intersectEnd = spanEnd < end ? spanEnd : end;
+
+      if (intersectStart < intersectEnd) {
+        selectedSpans.add(span.copyWith(
+          text: span.text.substring(
+            intersectStart - spanStart,
+            intersectEnd - spanStart,
+          ),
+        ));
       }
+      offset = spanEnd;
     }
+
+    if (selectedSpans.isEmpty) return '';
+
+    // Serialize as a fragment
+    final tempDoc = Document(blocks: [ParagraphNode(spans: selectedSpans)]);
+    final serializer = SmartHtmlSerializer();
+    return serializer.serialize(tempDoc);
   }
 
-  void redo() {
-    if (undoRedoManager.canRedo) {
-      final doc = undoRedoManager.redo(document);
-      if (doc != null) {
-        document = doc;
-        onDocumentChanged?.call();
-      }
-    }
+  /// Parses HTML and inserts it at the given location.
+  void pasteHtml(int blockIndex, int offset, String html,
+      {required SmartHtmlParser parser}) {
+    if (html.isEmpty) return;
+    final parsedDoc = parser.parse(html);
+    insertParsedDocument(blockIndex, offset, parsedDoc);
   }
 }

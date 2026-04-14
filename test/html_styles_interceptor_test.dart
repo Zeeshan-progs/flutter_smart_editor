@@ -1,6 +1,7 @@
+import 'package:flutter_smart_editor/src/models/enums.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_smart_editor/flutter_smart_editor.dart';
-import 'package:flutter_smart_editor/src/core/html_serializer.dart';
+import 'package:flutter_smart_editor/src/core/infra/html_serializer.dart';
 
 void main() {
   test('Modifying styles map without returning custom string', () {

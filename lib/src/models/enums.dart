@@ -30,8 +30,6 @@ enum SmartButtonType {
   underline,
   clearFormatting,
   strikethrough,
-  superscript,
-  subscript,
   foregroundColor,
   highlightColor,
   ul,
@@ -40,24 +38,16 @@ enum SmartButtonType {
   alignCenter,
   alignRight,
   alignJustify,
-  increaseIndent,
-  decreaseIndent,
-  ltr,
-  rtl,
-  link,
-  picture,
-  audio,
-  video,
-  otherFile,
-  table,
-  hr,
-  fullscreen,
-  codeview,
   undo,
   redo,
-  help,
   copy,
   paste,
+  fontSize,
+  fontName,
+  blockType,
+  bulletList,
+  orderedList,
+  horizontalRule,
 }
 
 /// Identifies a toolbar dropdown type (used in onDropdownChanged callback)
@@ -80,6 +70,62 @@ enum BlockType {
   heading4,
   heading5,
   heading6,
+  bulletList,
+  orderedList,
+  horizontalRule,
+}
+
+/// The type of list for a list item
+enum SmartListType {
+  /// Unordered list (`<ul>`)
+  bullet,
+
+  /// Ordered list (`<ol>`)
+  ordered,
+}
+
+/// Predefined bullet shapes for unordered lists.
+/// Can be set globally via [SmartEditorSettings.defaultBulletStyle]
+/// or per-list via the toolbar bullet style picker.
+enum SmartBulletStyle {
+  /// • Filled circle (default)
+  filledCircle,
+
+  /// ◦ Hollow circle
+  hollowCircle,
+
+  /// ▪ Filled square
+  filledSquare,
+
+  /// □ Hollow square
+  hollowSquare,
+
+  /// ◆ Filled diamond
+  diamond,
+
+  /// ◇ Hollow diamond
+  hollowDiamond,
+
+  /// → Arrow
+  arrow,
+
+  /// » Double arrow
+  doubleArrow,
+
+  /// – Dash
+  dash,
+
+  /// ★ Filled star
+  star,
+
+  /// ☆ Hollow star
+  hollowStar,
+
+  /// ✓ Checkmark
+  checkmark,
+
+  /// ▶ Filled triangle
+  triangle,
 }
 
 /// Text alignment for a block
@@ -98,15 +144,6 @@ enum SmartInputType {
   numeric,
   tel,
   url,
-}
-
-/// Notification style
-enum SmartNotificationType {
-  info,
-  warning,
-  success,
-  danger,
-  plaintext,
 }
 
 /// Direction for dropdown menu opening
@@ -137,4 +174,16 @@ enum SmartTagType {
 
   /// A generic style span (<span>) for colors, fonts, etc.
   span,
+
+  /// A list item (<li>)
+  listItem,
+
+  /// An unordered list container (<ul>)
+  unorderedList,
+
+  /// An ordered list container (<ol>)
+  orderedList,
+
+  /// A horizontal rule (<hr>)
+  horizontalRule,
 }
