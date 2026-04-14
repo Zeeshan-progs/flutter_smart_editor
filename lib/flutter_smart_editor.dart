@@ -6,18 +6,15 @@ library flutter_smart_editor;
 // Top-level widgets
 export 'smart_editor.dart';
 export 'smart_editor_controller.dart';
+export 'src/models/toolbar/toolbar_index.dart';
 
 // Settings (Simplified into 2 classes)
 export 'src/models/editor_settings.dart';
 export 'src/models/toolbar_settings.dart';
 
-// Toolbar button groups
-export 'src/models/toolbar_buttons.dart';
+// Document model & Nodes
+export 'src/core/document/document.dart';
+export 'src/models/nodes/node_index.dart';
 
-// Enums
+// enums
 export 'src/models/enums.dart';
-
-export 'src/models/pending_inline_format.dart';
-
-// Document model (for advanced usage)
-export 'src/core/document.dart';

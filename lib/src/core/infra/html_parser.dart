@@ -1,8 +1,8 @@
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:flutter/painting.dart';
-import '../core/document.dart';
-import '../models/enums.dart';
+import '../document/document.dart';
+import '../../models/enums.dart';
 
 /// Parses an HTML string into a [Document] tree.
 ///

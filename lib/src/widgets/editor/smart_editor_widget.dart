@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../core/document.dart';
-import '../core/document_controller.dart';
-import '../core/html_serializer.dart';
-import '../models/editor_settings.dart';
-import '../models/enums.dart';
-import '../models/pending_inline_format.dart';
-import 'block_widget.dart';
+import '../../core/document/document.dart';
+import '../../core/document/document_controller.dart';
+import '../../core/infra/html_serializer.dart';
+import '../../models/editor_settings.dart';
+import '../../models/enums.dart';
+import '../../models/pending_inline_format.dart';
+import '../blocks/block_widget.dart';
 import 'package:super_clipboard/super_clipboard.dart';
-import '../core/html_parser.dart';
+import '../../core/infra/html_parser.dart';
 import 'keyboard_done_overlay.dart';
 
 /// The main editor widget that renders the document as a list of blocks.
@@ -72,6 +72,14 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     _syncFocusNodes();
 
     _docController.addListener(_onDocChanged);
+    
+    // Connect message callback
+    _docController.onMessage = (msg) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), duration: const Duration(seconds: 1)),
+      );
+    };
 
     // Fire onInit after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -577,6 +585,9 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     final formats = _getMergedFormats(blockIndex, probeOffset);
     widget.editorSettings.onChangeSelection?.call(formats);
     widget.onFormatStateChanged?.call(blockIndex, formats);
+
+    // Notify listeners so the public controller (which queries our selection) updates the toolbar
+    _docController.notifyListeners();
   }
 
   /// Called when a block is reordered

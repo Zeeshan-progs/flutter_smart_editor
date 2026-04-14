@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'src/core/document.dart';
-import 'src/core/document_controller.dart';
-import 'src/core/html_parser.dart';
-import 'src/core/html_serializer.dart';
-import 'src/core/undo_redo_manager.dart';
+import 'src/core/document/document.dart';
+import 'src/core/document/document_controller.dart';
+import 'src/core/infra/html_parser.dart';
+import 'src/core/infra/html_serializer.dart';
+import 'src/core/document/undo_redo_manager.dart';
+import 'package:super_clipboard/super_clipboard.dart';
 import 'src/models/enums.dart';
-import 'src/widgets/smart_editor_widget.dart';
-import 'src/widgets/smart_toolbar_widget.dart';
+import 'src/widgets/editor/smart_editor_widget.dart';
+import 'src/widgets/toolbar/smart_toolbar_widget.dart';
+import 'dart:async';
 
 /// The public controller for [SmartEditor].
 ///
@@ -33,16 +35,23 @@ class SmartEditorController extends ChangeNotifier {
       undoRedoManager: _undoRedoManager,
     );
     _documentController.addListener(_onDocumentChanged);
+    _documentController.onMessage = (msg) => onMessage?.call(msg);
+    _initClipboardListener();
   }
 
   final bool processInputHtml;
   final bool processOutputHtml;
   final bool processNewLineAsBr;
+  
+  bool _canPaste = false;
+  
+  /// Callback for providing user feedback (e.g., SnackBars).
+  void Function(String message)? onMessage;
 
-  final SmartHtmlParser _parser = SmartHtmlParser();
-  final SmartHtmlSerializer _serializer = SmartHtmlSerializer();
   final UndoRedoManager _undoRedoManager = UndoRedoManager();
   late final DocumentController _documentController;
+
+  Timer? _clipboardTimer;
 
   /// Custom tag serialization callback.
   String? Function(
@@ -75,6 +84,7 @@ class SmartEditorController extends ChangeNotifier {
   Document get document => _documentController.document;
 
   void _onDocumentChanged() {
+    _updatePasteState(); // Refresh clipboard state immediately on internal changes
     notifyListeners();
   }
 
@@ -230,6 +240,85 @@ class SmartEditorController extends ChangeNotifier {
 
   /// Returns the current character count.
   int get characterCount => _documentController.document.totalLength;
+
+  // ─── Clipboard Methods ─────────────────────────────────────────
+
+  /// Whether there is a selection available to copy.
+  bool get canCopy {
+    final selection = _editorWidgetState?.selection;
+    return selection != null && !selection.isCollapsed;
+  }
+
+  /// Whether the system clipboard contains pasteable content.
+  bool get canPaste => _canPaste;
+
+  void _initClipboardListener() {
+    // Start periodic polling as a fallback since SystemClipboard has no native listener on all platforms
+    _clipboardTimer = Timer.periodic(const Duration(seconds: 2), (_) => _updatePasteState());
+    _updatePasteState(); // Initial check
+  }
+
+  Future<void> _updatePasteState() async {
+    final reader = await SystemClipboard.instance?.read();
+    final hasContent = reader != null && 
+        (reader.canProvide(Formats.htmlText) || reader.canProvide(Formats.plainText));
+    
+    if (hasContent != _canPaste) {
+      _canPaste = hasContent;
+      notifyListeners();
+    }
+  }
+
+  /// Copies the current selection to the system clipboard as HTML and Text.
+  Future<void> copySelection() async {
+    final selection = _editorWidgetState?.selection;
+    final blockIndex = _editorWidgetState?.focusedBlockIndex;
+    
+    if (selection == null || selection.isCollapsed || blockIndex == null) return;
+
+    final html = _documentController.getSelectedHtml(blockIndex, selection);
+    final plainText = _documentController.getSelectedPlainText(blockIndex, selection);
+
+    final item = DataWriterItem();
+    if (html.isNotEmpty) {
+      item.add(Formats.htmlText(html));
+    }
+    item.add(Formats.plainText(plainText));
+
+    await SystemClipboard.instance?.write([item]);
+    onMessage?.call('Copied to clipboard');
+  }
+
+  /// Pastes content from the system clipboard into the editor.
+  Future<void> pasteContent() async {
+    final blockIndex = _editorWidgetState?.focusedBlockIndex;
+    if (blockIndex == null) return;
+
+    final reader = await SystemClipboard.instance?.read();
+    if (reader == null) return;
+
+    if (reader.canProvide(Formats.htmlText)) {
+      final html = await reader.readValue(Formats.htmlText);
+      if (html != null && html.isNotEmpty) {
+        insertHtml(html);
+        return;
+      }
+    }
+
+    if (reader.canProvide(Formats.plainText)) {
+      final text = await reader.readValue(Formats.plainText);
+      if (text != null && text.isNotEmpty) {
+        insertText(text);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _clipboardTimer?.cancel();
+    _documentController.removeListener(_onDocumentChanged);
+    super.dispose();
+  }
 
   // ─── Internal Helpers ─────────────────────────────────────────
 

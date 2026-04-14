@@ -1,6 +1,6 @@
 import 'package:flutter/painting.dart';
 
-import '../core/document.dart';
+import '../core/document/document.dart';
 import 'enums.dart';
 
 /// Pending inline style for the next insertion when the caret has no selection.

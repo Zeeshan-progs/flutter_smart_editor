@@ -1,6 +1,6 @@
 import 'package:flutter/painting.dart';
-import '../core/document.dart';
-import '../models/enums.dart';
+import '../document/document.dart';
+import '../../models/enums.dart';
 
 /// Converts a [Document] tree into an HTML string.
 ///

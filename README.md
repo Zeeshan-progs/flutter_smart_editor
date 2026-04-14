@@ -28,10 +28,11 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
     - [Button & Text Styling](#button--text-styling)
     - [Dropdown Styling](#dropdown-styling)
     - [Interceptors](#interceptors)
-  - [3. Interactive List Customization](#️-interactive-list-customization)
+  - [3. Interactive List Customization](#3-interactive-list-customization)
     - [Enabling the Bullet Picker](#enabling-the-bullet-picker)
     - [Customizing Available Styles](#customizing-available-styles)
     - [Custom Serialization Example](#custom-serialization-example)
+- [🎛️ Toolbar Customization](#️-toolbar-customization)
 - [🏃 Migration Guide](#-migration-guide-v10x--v200)
 - [🛠️ Upcoming Features](#️-upcoming-features)
 - [❓ Troubleshooting](#-troubleshooting)
@@ -230,6 +231,60 @@ SmartEditorSettings(
   },
 )
 ```
+
+---
+
+## 🎛️ Toolbar Customization
+
+The toolbar is built using modular button groups. You can fully customize which groups appear and which specific buttons within those groups are active.
+
+### Full Toolbar Example
+
+Here is how you would configure a toolbar with **every available group** active:
+
+```dart
+SmartToolbarSettings(
+  toolbarType: SmartToolbarType.expandable,
+  defaultButtons: [
+    const SmartStyleButtons(),      // Heading 1-6 & Paragraph
+    const SmartFontButtons(
+      strikethrough: true,
+      fontSize: true,
+      clearAll: true,
+    ),
+    const SmartColorButtons(
+      foregroundColor: true,
+      highlightColor: true,
+    ),
+    const SmartListButtons(
+      ul: true,
+      ol: true,
+      hr: true,
+      listStyles: true,             // Enables interactive bullet picker
+    ),
+    const SmartFontFamilyButtons(),
+    const SmartParagraphButtons(),    // Alignment: Left, Center, Right, Justify
+    const SmartOtherButtons(
+      undo: true,
+      redo: true,
+      copy: true,
+      paste: true,
+    ),
+  ],
+)
+```
+
+### Breakdown of Button Groups
+
+| Group Class | Description |
+| --- | --- |
+| `SmartStyleButtons` | Controls the paragraph style dropdown (Heading 1 to Heading 6 and Normal text). |
+| `SmartFontButtons` | Standard formatting: Bold, Italic, Underline, Strikethrough, Font Size, and Clear Formatting. |
+| `SmartColorButtons` | Integrated color pickers for text color and background highlight color. |
+| `SmartFontFamilyButtons` | A dropdown for selecting from your application's available font families. |
+| `SmartListButtons` | Bullet/Numbered list toggles, horizontal dividers (HR), and the premium Bullet Style Picker. |
+| `SmartParagraphButtons` | Text alignment controls: Left, Center, Right, and Full Justify. |
+| `SmartOtherButtons` | Utility actions: Undo, Redo, Copy to Clipboard, and Paste. |
 
 ---
 

@@ -1,95 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../core/document.dart';
-import '../models/enums.dart';
-import '../models/editor_settings.dart';
-
-// ─── Rich Text Controller ───────────────────────────────────────────────
-
-class _RichTextEditingController extends TextEditingController {
-  _RichTextEditingController({super.text});
-
-  void refresh() => notifyListeners();
-
-  List<TextFormatSpan> formatSpans = [];
-  double baseFontSize = 16.0;
-  FontWeight baseFontWeight = FontWeight.normal;
-  Color defaultColor = Colors.black;
-
-  @override
-  TextSpan buildTextSpan({
-    required BuildContext context,
-    TextStyle? style,
-    required bool withComposing,
-  }) {
-    if (formatSpans.isEmpty || text.isEmpty) {
-      return TextSpan(
-        text: text,
-        style: style?.copyWith(
-          fontSize: baseFontSize,
-          fontWeight: baseFontWeight,
-          color: defaultColor,
-        ),
-      );
-    }
-
-    final children = <TextSpan>[];
-    var textOffset = 0;
-
-    for (final span in formatSpans) {
-      if (textOffset >= text.length) break;
-
-      final spanLength = span.text.length.clamp(0, text.length - textOffset);
-      if (spanLength <= 0) continue;
-
-      final spanText = text.substring(textOffset, textOffset + spanLength);
-
-      children.add(TextSpan(
-        text: spanText,
-        style: _buildSpanStyle(span),
-      ));
-
-      textOffset += spanLength;
-    }
-
-    if (textOffset < text.length) {
-      final lastSpan =
-          formatSpans.isNotEmpty ? formatSpans.last : TextFormatSpan.plain('');
-
-      children.add(TextSpan(
-        text: text.substring(textOffset),
-        style: _buildSpanStyle(lastSpan),
-      ));
-    }
-
-    // Ensure children inherit the base alignment and other non-inline styles,
-    // but the inline styles (color, weight, etc.) from _buildSpanStyle should win.
-    return TextSpan(
-      style: style,
-      children: children,
-    );
-  }
-
-  TextStyle _buildSpanStyle(TextFormatSpan span) {
-    final decorations = <TextDecoration>[];
-    if (span.isUnderline) decorations.add(TextDecoration.underline);
-    if (span.isStrikethrough) decorations.add(TextDecoration.lineThrough);
-
-    return TextStyle(
-      fontWeight: span.isBold || baseFontWeight == FontWeight.bold
-          ? FontWeight.bold
-          : FontWeight.normal,
-      fontStyle: span.isItalic ? FontStyle.italic : FontStyle.normal,
-      decoration: decorations.isEmpty
-          ? TextDecoration.none
-          : TextDecoration.combine(decorations),
-      fontSize: span.fontSize ?? baseFontSize,
-      color: span.foregroundColor ?? defaultColor,
-      backgroundColor: span.backgroundColor,
-      fontFamily: span.fontFamily,
-    );
-  }
-}
+import '../../core/document/document.dart';
+import '../../models/enums.dart';
+import '../../models/editor_settings.dart';
+import 'rich_text_controller.dart';
+import 'list_indicator.dart';
 
 // ─── Block Widget ───────────────────────────────────────────────────────
 
@@ -166,7 +81,7 @@ class BlockWidget extends StatefulWidget {
 }
 
 class BlockWidgetState extends State<BlockWidget> {
-  late _RichTextEditingController _textController;
+  late SmartTextEditingController _textController;
   static const String _zwsp = '\u200B';
   bool _isInternalUpdate = false;
   TextSelection _lastReportedSelection =
@@ -176,7 +91,7 @@ class BlockWidgetState extends State<BlockWidget> {
   void initState() {
     super.initState();
     _textController =
-        _RichTextEditingController(text: _zwsp + widget.block.plainText);
+        SmartTextEditingController(text: _zwsp + widget.block.plainText);
     _syncFormatSpans();
     _textController.addListener(_onControllerChanged);
     
@@ -249,8 +164,6 @@ class BlockWidgetState extends State<BlockWidget> {
 
     if (plainText != widget.block.plainText) {
       if (plainText.isEmpty && widget.block.plainText.isEmpty) {
-        // This case is usually handled by ZWSP deletion above,
-        // but kept for safety.
         return;
       }
 
@@ -319,25 +232,17 @@ class BlockWidgetState extends State<BlockWidget> {
   }
 
   /// Returns the inherent base font size for the block (paragraphs vs headings).
-  /// This is used as the foundational size for the whole block.
   double _getBlockBaseFontSize() {
     if (widget.block is HeadingNode) {
       final heading = (widget.block as HeadingNode);
       switch (heading.level) {
-        case 1:
-          return 32;
-        case 2:
-          return 28;
-        case 3:
-          return 24;
-        case 4:
-          return 20;
-        case 5:
-          return 18;
-        case 6:
-          return 16;
-        default:
-          return widget.editorSettings.defaultFontSize;
+        case 1: return 32;
+        case 2: return 28;
+        case 3: return 24;
+        case 4: return 20;
+        case 5: return 18;
+        case 6: return 16;
+        default: return widget.editorSettings.defaultFontSize;
       }
     }
     return widget.editorSettings.defaultFontSize;
@@ -365,14 +270,10 @@ class BlockWidgetState extends State<BlockWidget> {
 
   TextAlign _getTextAlign() {
     switch (widget.block.alignment) {
-      case SmartTextAlign.left:
-        return TextAlign.left;
-      case SmartTextAlign.center:
-        return TextAlign.center;
-      case SmartTextAlign.right:
-        return TextAlign.right;
-      case SmartTextAlign.justify:
-        return TextAlign.justify;
+      case SmartTextAlign.left: return TextAlign.left;
+      case SmartTextAlign.center: return TextAlign.center;
+      case SmartTextAlign.right: return TextAlign.right;
+      case SmartTextAlign.justify: return TextAlign.justify;
     }
   }
 
@@ -387,7 +288,6 @@ class BlockWidgetState extends State<BlockWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // ─── Horizontal Rule ─────────────────────────────────────────────────
     if (widget.block is HorizontalRuleNode) {
       return _buildHrWidget(context);
     }
@@ -408,7 +308,6 @@ class BlockWidgetState extends State<BlockWidget> {
             widget.onPaste(widget.blockIndex);
             return KeyEventResult.handled;
           }
-          // Tab / Shift+Tab for list indent
           if (event.logicalKey == LogicalKeyboardKey.tab &&
               widget.block is ListItemNode) {
             if (HardwareKeyboard.instance.isShiftPressed) {
@@ -464,12 +363,8 @@ class BlockWidgetState extends State<BlockWidget> {
             cursorRadius: widget.cursorRadius,
             cursorHeight: _getEffectiveCursorHeight(),
             strutStyle: widget.pendingFontSize != null
-                ? StrutStyle(
-                    fontSize: widget.pendingFontSize,
-                  )
-                : StrutStyle(
-                    fontSize: _getCursorFontSize(),
-                  ),
+                ? StrutStyle(fontSize: widget.pendingFontSize)
+                : StrutStyle(fontSize: _getCursorFontSize()),
             style: _getTextStyle(
                 widget.editorSettings.defaultFontSize, defaultColor),
             decoration: InputDecoration(
@@ -527,11 +422,6 @@ class BlockWidgetState extends State<BlockWidget> {
         false;
 
     final isDraggable = widget.showDragHandle && isBlockTypeDraggable;
-
-    // Only apply the horizontal handle space if:
-    // 1. This specific block has a drag handle visible (isDraggable).
-    // 2. This is a list item and lists are draggable (to maintain alignment
-    //    with the first item in the list).
     final needsHandleSpace =
         isDraggable || (widget.block is ListItemNode && isBlockTypeDraggable);
 
@@ -542,8 +432,6 @@ class BlockWidgetState extends State<BlockWidget> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Always reserve the same width for the drag handle area
-        // to maintain symmetric alignment across all blocks.
         SizedBox(
           width: 32,
           child: isDraggable ? _buildDragHandle() : const SizedBox.shrink(),
@@ -567,12 +455,10 @@ class BlockWidgetState extends State<BlockWidget> {
     );
   }
 
-  /// Builds the list item wrapper with depth indent and bullet/number indicator.
   Widget _buildListItemWrapper(BuildContext context, Widget textField) {
     final item = widget.block as ListItemNode;
     final depth = item.depth.clamp(0, 3);
     final indent = depth * 24.0;
-    final indicator = _buildIndicator(context, item);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -582,7 +468,12 @@ class BlockWidgetState extends State<BlockWidget> {
           width: 28,
           child: Padding(
             padding: const EdgeInsets.only(top: 3.0),
-            child: indicator,
+            child: ListItemIndicator(
+              item: item,
+              orderedCount: widget.orderedCount,
+              editorSettings: widget.editorSettings,
+              isDarkMode: widget.isDarkMode,
+            ),
           ),
         ),
         Expanded(child: textField),
@@ -590,104 +481,6 @@ class BlockWidgetState extends State<BlockWidget> {
     );
   }
 
-  /// Builds the bullet or number indicator for a list item.
-  Widget _buildIndicator(BuildContext context, ListItemNode item) {
-    final defaultColor = widget.isDarkMode ? Colors.white : Colors.black87;
-    final fontSize = widget.editorSettings.defaultFontSize;
-
-    if (item.listType == SmartListType.ordered) {
-      final label = _orderedLabel(widget.orderedCount, item.depth);
-      return Text(label,
-          style: TextStyle(fontSize: fontSize, color: defaultColor),
-          textAlign: TextAlign.right);
-    }
-
-    // Bullet
-    final bulletStyle =
-        item.bulletStyle ?? widget.editorSettings.defaultBulletStyle;
-    final symbol = _bulletSymbol(bulletStyle);
-    return Text(symbol,
-        style: TextStyle(fontSize: fontSize, color: defaultColor),
-        textAlign: TextAlign.center);
-  }
-
-  String _orderedLabel(int count, int depth) {
-    switch (depth % 4) {
-      case 0:
-        return '$count.';
-      case 1:
-        return '${String.fromCharCode(96 + count)}.';
-      case 2:
-        return '${_toRoman(count)}.';
-      case 3:
-        return '${String.fromCharCode(64 + count)}.';
-      default:
-        return '$count.';
-    }
-  }
-
-  String _toRoman(int n) {
-    if (n <= 0) return '';
-    const vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
-    const syms = [
-      'm',
-      'cm',
-      'd',
-      'cd',
-      'c',
-      'xc',
-      'l',
-      'xl',
-      'x',
-      'ix',
-      'v',
-      'iv',
-      'i'
-    ];
-    final buf = StringBuffer();
-    var num = n;
-    for (var i = 0; i < vals.length; i++) {
-      while (num >= vals[i]) {
-        buf.write(syms[i]);
-        num -= vals[i];
-      }
-    }
-    return buf.toString();
-  }
-
-  String _bulletSymbol(SmartBulletStyle style) {
-    // If no explicit style, use depth-based default
-    switch (style) {
-      case SmartBulletStyle.filledCircle:
-        return '\u2022';
-      case SmartBulletStyle.hollowCircle:
-        return '\u25e6';
-      case SmartBulletStyle.filledSquare:
-        return '\u25aa';
-      case SmartBulletStyle.hollowSquare:
-        return '\u25a1';
-      case SmartBulletStyle.diamond:
-        return '\u25c6';
-      case SmartBulletStyle.hollowDiamond:
-        return '\u25c7';
-      case SmartBulletStyle.arrow:
-        return '\u2192';
-      case SmartBulletStyle.doubleArrow:
-        return '\u00bb';
-      case SmartBulletStyle.dash:
-        return '\u2013';
-      case SmartBulletStyle.star:
-        return '\u2605';
-      case SmartBulletStyle.hollowStar:
-        return '\u2606';
-      case SmartBulletStyle.checkmark:
-        return '\u2713';
-      case SmartBulletStyle.triangle:
-        return '\u25b6';
-    }
-  }
-
-  /// Builds the horizontal rule divider widget.
   Widget _buildHrWidget(BuildContext context) {
     final hrStyle = widget.editorSettings.hrStyle;
     final defaultColor = widget.isDarkMode
@@ -713,9 +506,7 @@ class BlockWidgetState extends State<BlockWidget> {
             ?.contains(BlockType.horizontalRule) ??
         false;
 
-    if (!isDraggable) {
-      return divider;
-    }
+    if (!isDraggable) return divider;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,

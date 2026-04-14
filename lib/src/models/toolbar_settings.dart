@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'enums.dart';
-import 'toolbar_buttons.dart';
+import 'toolbar/toolbar_index.dart';
 
 /// Comprehensive settings for the toolbar's behavior, layout, and style.
 ///

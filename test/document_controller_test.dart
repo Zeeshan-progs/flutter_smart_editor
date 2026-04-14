@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/painting.dart';
-import 'package:flutter_smart_editor/src/core/document.dart';
-import 'package:flutter_smart_editor/src/core/document_controller.dart';
+import 'package:flutter_smart_editor/src/core/document/document.dart';
+import 'package:flutter_smart_editor/src/core/document/document_controller.dart';
 import 'package:flutter_smart_editor/src/models/enums.dart';
 
 void main() {

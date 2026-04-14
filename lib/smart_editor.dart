@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'smart_editor_controller.dart';
-import 'src/core/html_parser.dart';
+import 'src/core/infra/html_parser.dart';
 import 'src/models/editor_settings.dart';
 import 'src/models/toolbar_settings.dart';
 import 'src/models/enums.dart';
 import 'src/models/pending_inline_format.dart';
-import 'src/widgets/smart_editor_widget.dart';
-import 'src/widgets/smart_toolbar_widget.dart';
+import 'src/widgets/editor/smart_editor_widget.dart';
+import 'src/widgets/toolbar/smart_toolbar_widget.dart';
 
 /// A pure Flutter rich text HTML editor widget.
 ///
@@ -139,6 +139,7 @@ class _SmartEditorState extends State<SmartEditor> {
             ? SmartToolbar(
                 key: _toolbarKey,
                 documentController: widget.controller.documentController,
+                controller: widget.controller,
                 settings: widget.toolbarSettings,
                 getFocusedBlockIndex: () =>
                     _editorKey.currentState?.focusedBlockIndex ?? 0,

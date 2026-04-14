@@ -3,7 +3,7 @@ import 'package:flutter_smart_editor/src/models/editor_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_editor/smart_editor.dart';
-import 'package:flutter_smart_editor/src/widgets/smart_editor_widget.dart';
+import 'package:flutter_smart_editor/src/widgets/editor/smart_editor_widget.dart';
 import 'package:flutter_smart_editor/src/models/enums.dart';
 
 void main() {

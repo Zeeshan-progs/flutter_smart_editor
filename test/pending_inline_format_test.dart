@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_smart_editor/src/core/document_controller.dart';
+import 'package:flutter_smart_editor/src/core/document/document_controller.dart';
 import 'package:flutter_smart_editor/src/models/enums.dart';
 import 'package:flutter_smart_editor/src/models/pending_inline_format.dart';
 import 'package:flutter_test/flutter_test.dart';

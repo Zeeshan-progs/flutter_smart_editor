@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../core/html_parser.dart';
-import '../core/html_serializer.dart';
-import '../core/document.dart';
-import '../core/undo_redo_manager.dart';
-import '../models/enums.dart';
+import 'package:flutter_smart_editor/src/core/document/document.dart';
+import '../../models/enums.dart';
+import '../infra/html_parser.dart';
+import '../infra/html_serializer.dart';
+import 'undo_redo_manager.dart';
 
 /// Editing operations on the [Document] model.
 ///
@@ -19,6 +19,35 @@ class DocumentController extends ChangeNotifier {
     UndoRedoManager? undoRedoManager,
   })  : document = document ?? Document(),
         undoRedoManager = undoRedoManager ?? UndoRedoManager();
+
+  /// Callback for providing user feedback (e.g., SnackBars).
+  void Function(String message)? onMessage;
+
+  /// Gets the HTML for a specific selection range within a block.
+  String getSelectedHtml(int blockIndex, TextSelection selection) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return '';
+    final block = document.blocks[blockIndex];
+    if (selection.isCollapsed) return '';
+
+    final start = selection.start;
+    final end = selection.end;
+
+    // Create a temporary block to serialize just the selection
+    final tempBlock = block.deepCopy();
+    _deleteFromSpans(tempBlock, end, tempBlock.textLength - end);
+    _deleteFromSpans(tempBlock, 0, start);
+
+    final tempDoc = Document(blocks: [tempBlock]);
+    return SmartHtmlSerializer().serialize(tempDoc);
+  }
+
+  /// Gets the plain text for a specific selection range within a block.
+  String getSelectedPlainText(int blockIndex, TextSelection selection) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return '';
+    final block = document.blocks[blockIndex];
+    if (selection.isCollapsed) return '';
+    return block.plainText.substring(selection.start, selection.end);
+  }
 
   /// Saves the current state before making a change
   void _saveState() {
