@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../../core/document/document.dart';
 import '../../core/document/document_controller.dart';
 import '../../core/infra/html_serializer.dart';
@@ -72,7 +73,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     _syncFocusNodes();
 
     _docController.addListener(_onDocChanged);
-    
+
     // Connect message callback
     _docController.onMessage = (msg) {
       if (!mounted) return;
@@ -86,7 +87,6 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       if (!_initialized) {
         _initialized = true;
         widget.editorSettings.onInit?.call();
-
         if (widget.editorSettings.autofocus && _document.blocks.isNotEmpty) {
           _focusNodes[_document.blocks[0].id]?.requestFocus();
         }
@@ -105,8 +105,19 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   void _onDocChanged() {
     if (!mounted) return;
-
     rebuild();
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted) return;
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(fn);
+      });
+    } else {
+      setState(fn);
+    }
   }
 
   /// Synchronizes the focus nodes and block keys with the document blocks
@@ -587,7 +598,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     widget.onFormatStateChanged?.call(blockIndex, formats);
 
     // Notify listeners so the public controller (which queries our selection) updates the toolbar
-    _docController.notifyListeners();
+    _docController.refresh();
   }
 
   /// Called when a block is reordered
@@ -745,7 +756,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   /// Forces a rebuild of all blocks
   void rebuild() {
-    setState(() {
+    _safeSetState(() {
       _syncFocusNodes();
     });
     _notifyContentChanged();

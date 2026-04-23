@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_smart_editor/src/core/document/document.dart';
 import '../../models/enums.dart';
 import '../infra/html_parser.dart';
@@ -58,6 +59,15 @@ class DocumentController extends ChangeNotifier {
   void _notifyChanged() {
     document.normalize();
     notifyListeners();
+  }
+
+  /// Manually triggers logic that depends on document changes (e.g. selection updates).
+  void refresh() {
+    if (WidgetsBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Restoration method for undo/redo
@@ -885,48 +895,6 @@ class DocumentController extends ChangeNotifier {
     _saveState();
     document = Document();
     _notifyChanged();
-  }
-
-  // ─── Clipboard Operations ─────────────────────────────────────
-
-  /// Serializes the selected range within a block to HTML.
-  String getSelectedHtml(int blockIndex, TextSelection selection) {
-    if (blockIndex < 0 || blockIndex >= document.blocks.length) return '';
-    if (selection.isCollapsed) return '';
-
-    final block = document.blocks[blockIndex];
-    final start = selection.start;
-    final end = selection.end;
-
-    // Create a temporary block with only the selected spans
-    final selectedSpans = <TextFormatSpan>[];
-    var offset = 0;
-
-    for (var span in block.spans) {
-      final spanLen = span.text.length;
-      final spanStart = offset;
-      final spanEnd = offset + spanLen;
-
-      final intersectStart = spanStart > start ? spanStart : start;
-      final intersectEnd = spanEnd < end ? spanEnd : end;
-
-      if (intersectStart < intersectEnd) {
-        selectedSpans.add(span.copyWith(
-          text: span.text.substring(
-            intersectStart - spanStart,
-            intersectEnd - spanStart,
-          ),
-        ));
-      }
-      offset = spanEnd;
-    }
-
-    if (selectedSpans.isEmpty) return '';
-
-    // Serialize as a fragment
-    final tempDoc = Document(blocks: [ParagraphNode(spans: selectedSpans)]);
-    final serializer = SmartHtmlSerializer();
-    return serializer.serialize(tempDoc);
   }
 
   /// Parses HTML and inserts it at the given location.

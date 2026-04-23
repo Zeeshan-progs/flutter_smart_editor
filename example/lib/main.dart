@@ -61,9 +61,9 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
               editorSettings: SmartEditorSettings(
                 maxLines: 9,
                 hint: 'Start typing here...',
-                initialText: '<p>Welcome to <b>Flutter Smart Editor</b>!</p>'
-                    '<h2>A Pure Flutter Editor</h2>'
-                    '<p>No WebView. No JavaScript. Just <i>Dart and Flutter</i>.</p>',
+                autofocus: true,
+                initialText:
+                    '''<p>Welcome to <b>Flutter Smart Editor</b>!</p> <h2>A Pure Flutter Editor</h2> <p>No WebView. No JavaScript. Just <i>Dart and Flutter</i>.</p>''',
                 // Style & Layout
                 editorPadding: const EdgeInsets.all(16),
                 borderRadius: const BorderRadius.all(Radius.circular(12)),

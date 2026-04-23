@@ -7,7 +7,6 @@ import 'rich_text_controller.dart';
 import 'list_indicator.dart';
 
 // ─── Block Widget ───────────────────────────────────────────────────────
-
 class BlockWidget extends StatefulWidget {
   const BlockWidget({
     super.key,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'src/core/document/document.dart';
 import 'src/core/document/document_controller.dart';
 import 'src/core/infra/html_parser.dart';
@@ -42,14 +43,16 @@ class SmartEditorController extends ChangeNotifier {
   final bool processInputHtml;
   final bool processOutputHtml;
   final bool processNewLineAsBr;
-  
+
   bool _canPaste = false;
-  
+
   /// Callback for providing user feedback (e.g., SnackBars).
   void Function(String message)? onMessage;
 
   final UndoRedoManager _undoRedoManager = UndoRedoManager();
   late final DocumentController _documentController;
+  final SmartHtmlSerializer _serializer = SmartHtmlSerializer();
+  final SmartHtmlParser _parser = SmartHtmlParser();
 
   Timer? _clipboardTimer;
 
@@ -85,7 +88,16 @@ class SmartEditorController extends ChangeNotifier {
 
   void _onDocumentChanged() {
     _updatePasteState(); // Refresh clipboard state immediately on internal changes
-    notifyListeners();
+    _safeNotifyListeners();
+  }
+
+  void _safeNotifyListeners() {
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
+    } else {
+      notifyListeners();
+    }
   }
 
   // ─── Content Methods ──────────────────────────────────────────
@@ -254,18 +266,20 @@ class SmartEditorController extends ChangeNotifier {
 
   void _initClipboardListener() {
     // Start periodic polling as a fallback since SystemClipboard has no native listener on all platforms
-    _clipboardTimer = Timer.periodic(const Duration(seconds: 2), (_) => _updatePasteState());
+    _clipboardTimer =
+        Timer.periodic(const Duration(seconds: 2), (_) => _updatePasteState());
     _updatePasteState(); // Initial check
   }
 
   Future<void> _updatePasteState() async {
     final reader = await SystemClipboard.instance?.read();
-    final hasContent = reader != null && 
-        (reader.canProvide(Formats.htmlText) || reader.canProvide(Formats.plainText));
-    
+    final hasContent = reader != null &&
+        (reader.canProvide(Formats.htmlText) ||
+            reader.canProvide(Formats.plainText));
+
     if (hasContent != _canPaste) {
       _canPaste = hasContent;
-      notifyListeners();
+      _safeNotifyListeners();
     }
   }
 
@@ -273,11 +287,14 @@ class SmartEditorController extends ChangeNotifier {
   Future<void> copySelection() async {
     final selection = _editorWidgetState?.selection;
     final blockIndex = _editorWidgetState?.focusedBlockIndex;
-    
-    if (selection == null || selection.isCollapsed || blockIndex == null) return;
+
+    if (selection == null || selection.isCollapsed || blockIndex == null) {
+      return;
+    }
 
     final html = _documentController.getSelectedHtml(blockIndex, selection);
-    final plainText = _documentController.getSelectedPlainText(blockIndex, selection);
+    final plainText =
+        _documentController.getSelectedPlainText(blockIndex, selection);
 
     final item = DataWriterItem();
     if (html.isNotEmpty) {
@@ -286,6 +303,7 @@ class SmartEditorController extends ChangeNotifier {
     item.add(Formats.plainText(plainText));
 
     await SystemClipboard.instance?.write([item]);
+    await _updatePasteState(); // Refresh canPaste state immediately
     onMessage?.call('Copied to clipboard');
   }
 

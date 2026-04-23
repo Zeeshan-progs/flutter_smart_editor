@@ -348,9 +348,9 @@ SmartToolbarSettings(
 
 ---
 
-## 🏃 Migration Guide (v1.0.x ➔ v2.0.0)
+## 🏃 Migration Guide (v1.0.x ➔ v2.x.x)
 
-Version 2.0.0 introduces a **Unified Settings API**. Instead of separate `ScrollSettings`, `KeyboardSettings`, etc., all editor-related properties are now in `SmartEditorSettings`.
+Version 2.x.x introduces a **Unified Settings API**. Instead of separate `ScrollSettings`, `KeyboardSettings`, etc., all editor-related properties are now in `SmartEditorSettings`.
 
 **Old:**
 

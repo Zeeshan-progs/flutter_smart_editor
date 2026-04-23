@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../../../smart_editor_controller.dart';
 import '../../core/document/document_controller.dart';
 import '../../models/enums.dart';
@@ -81,16 +82,28 @@ class SmartToolbarState extends State<SmartToolbar> {
 
   void _onControllerChanged() {
     if (!mounted) return;
-    setState(() {
+    _safeSetState(() {
       // Rebuild to reflect canCopy / canPaste
     });
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted) return;
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(fn);
+      });
+    } else {
+      setState(fn);
+    }
   }
 
   void updateFormatState(
       int blockIndex, Map<SmartButtonType, dynamic> formats) {
     if (!mounted) return;
 
-    setState(() {
+    _safeSetState(() {
       _activeFormats = Map.from(formats);
       _cachedSelection = widget.getSelection();
       _cachedBlockIndex = blockIndex;
@@ -504,6 +517,7 @@ class SmartToolbarState extends State<SmartToolbar> {
           itemHeight: widget.settings.itemHeight,
           buttonIconSize: widget.settings.buttonIconSize,
           documentController: widget.documentController,
+          editorController: widget.controller,
         ));
       } else if (group is SmartColorButtons) {
         items.add(ColorButtonGroup(

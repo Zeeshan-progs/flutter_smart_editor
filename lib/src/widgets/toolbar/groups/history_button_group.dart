@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../smart_editor_controller.dart';
 import '../../../core/document/document_controller.dart';
 import '../../../models/enums.dart';
 import '../../../models/toolbar/toolbar_index.dart';
@@ -17,6 +18,7 @@ class HistoryButtonGroup extends StatelessWidget {
     required this.itemHeight,
     required this.buttonIconSize,
     required this.documentController,
+    required this.editorController,
   });
 
   final SmartOtherButtons group;
@@ -28,8 +30,9 @@ class HistoryButtonGroup extends StatelessWidget {
   final bool enabled;
   final double itemHeight;
   final double buttonIconSize;
-  
+
   final DocumentController documentController;
+  final SmartEditorController editorController;
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +79,7 @@ class HistoryButtonGroup extends StatelessWidget {
         activeBg: activeBg,
         onSurface: onSurface,
         disabledColor: disabledColor,
-        enabled: enabled,
+        enabled: enabled && editorController.canCopy,
         size: itemHeight,
         iconSize: buttonIconSize - 2,
         tooltip: 'Copy',
@@ -92,7 +95,7 @@ class HistoryButtonGroup extends StatelessWidget {
         activeBg: activeBg,
         onSurface: onSurface,
         disabledColor: disabledColor,
-        enabled: enabled,
+        enabled: enabled && editorController.canPaste,
         size: itemHeight,
         iconSize: buttonIconSize - 2,
         tooltip: 'Paste',
