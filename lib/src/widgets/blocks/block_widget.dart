@@ -93,7 +93,7 @@ class BlockWidgetState extends State<BlockWidget> {
         SmartTextEditingController(text: _zwsp + widget.block.plainText);
     _syncFormatSpans();
     _textController.addListener(_onControllerChanged);
-    
+
     // Initial selection should be at 1
     _textController.selection = const TextSelection.collapsed(offset: 1);
   }
@@ -235,13 +235,20 @@ class BlockWidgetState extends State<BlockWidget> {
     if (widget.block is HeadingNode) {
       final heading = (widget.block as HeadingNode);
       switch (heading.level) {
-        case 1: return 32;
-        case 2: return 28;
-        case 3: return 24;
-        case 4: return 20;
-        case 5: return 18;
-        case 6: return 16;
-        default: return widget.editorSettings.defaultFontSize;
+        case 1:
+          return 32;
+        case 2:
+          return 28;
+        case 3:
+          return 24;
+        case 4:
+          return 20;
+        case 5:
+          return 18;
+        case 6:
+          return 16;
+        default:
+          return widget.editorSettings.defaultFontSize;
       }
     }
     return widget.editorSettings.defaultFontSize;
@@ -269,10 +276,14 @@ class BlockWidgetState extends State<BlockWidget> {
 
   TextAlign _getTextAlign() {
     switch (widget.block.alignment) {
-      case SmartTextAlign.left: return TextAlign.left;
-      case SmartTextAlign.center: return TextAlign.center;
-      case SmartTextAlign.right: return TextAlign.right;
-      case SmartTextAlign.justify: return TextAlign.justify;
+      case SmartTextAlign.left:
+        return TextAlign.left;
+      case SmartTextAlign.center:
+        return TextAlign.center;
+      case SmartTextAlign.right:
+        return TextAlign.right;
+      case SmartTextAlign.justify:
+        return TextAlign.justify;
     }
   }
 

@@ -57,6 +57,8 @@ class StylePickerButton extends StatelessWidget {
         return 'Ordered List';
       case BlockType.horizontalRule:
         return 'Divider';
+      case BlockType.table:
+        return 'Table';
     }
   }
 

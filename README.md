@@ -32,6 +32,7 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
     - [Enabling the Bullet Picker](#enabling-the-bullet-picker)
     - [Customizing Available Styles](#customizing-available-styles)
     - [Custom Serialization Example](#custom-serialization-example)
+  - [4. Programmatic Table & List APIs](#4-programmatic-table--list-apis)
 - [🎛️ Toolbar Customization](#️-toolbar-customization)
 - [🏃 Migration Guide](#-migration-guide-v10x--v200)
 - [🛠️ Upcoming Features](#️-upcoming-features)
@@ -54,6 +55,7 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
 - **Dynamic Height**: The editor expands as you type and can be limited via `maxLines`.
 - **Native Paste**: Premium clipboard support—paste rich text/HTML from browsers and other apps.
 - **Lists (v2.1+)**: Robust, atomic Bullet and Numbered lists with smart reordering.
+- **Tables (v2.1+)**: Full support for HTML tables with dynamic row/column management (insertion, deletion, and cell updates).
 - **Mobile Optimized**: Smart backspace bridge for soft keyboards and accessory bar avoidance.
 - **Undo/Redo**: Built-in history management.
 - **Material 3 Toolbar**: **Scrollable**, **Grid**, or **Expandable** layouts.
@@ -232,6 +234,68 @@ SmartEditorSettings(
 )
 ```
 
+### 4. Programmatic Table & List APIs
+
+`SmartEditorController` provides a rich set of programmatic APIs to manipulate tables and lists dynamically from your parent widgets, custom toolbar buttons, or keyboard listeners.
+
+#### 📊 Table Management APIs
+
+When the user is interacting with tables, you can use these controller methods to perform programmatic modifications:
+
+| Method / Getter | Return Type | Description |
+| :--- | :--- | :--- |
+| `insertTable({int rows, int cols})` | `void` | Inserts a new responsive HTML table grid with specified dimensions after the active block. |
+| `insertRow()` | `void` | Inserts a new table row below the currently focused table cell. |
+| `insertColumn()` | `void` | Inserts a new table column to the right of the currently focused table cell. |
+| `deleteRow()` | `void` | Deletes the row containing the currently focused table cell. |
+| `deleteColumn()` | `void` | Deletes the column containing the currently focused table cell. |
+| `deleteTable()` | `void` | Deletes the entire focused table block. |
+| `isInsideTable` | `bool` | Returns `true` if the caret/cursor is currently inside a table cell. |
+| `focusedTableInfo` | `({int blockIndex, int row, int col})?` | Returns the exact coordinate position of the focused cell, or `null`. |
+
+##### Code Example: Context-Aware Table Modification
+```dart
+final controller = SmartEditorController();
+
+// 1. Insert a 3x3 table programmatically
+controller.insertTable(rows: 3, cols: 3);
+
+// 2. perform context-aware row addition
+if (controller.isInsideTable) {
+  print("Focused cell coordinates: ${controller.focusedTableInfo}");
+  
+  // Add a new row below the focused cell
+  controller.insertRow();
+}
+```
+
+#### 🔢 List & Numbered List APIs
+
+To toggle lists and adjust indentation programmatically:
+
+| Method / Getter | Arguments | Description |
+| :--- | :--- | :--- |
+| `setBlockType(BlockType type)` | `BlockType.bulletList` | Converts the active block to an Unordered Bullet List (`<ul>`). |
+| `setBlockType(BlockType type)` | `BlockType.orderedList` | Converts the active block to an Ordered Numbered List (`<ol>`). |
+| `setBlockType(BlockType type)` | `BlockType.paragraph` | Converts a list item back to standard paragraph text (`<p>`). |
+| `documentController.increaseIndent(int blockIndex)` | `blockIndex` | Increases list nesting depth/indentation (supports up to 3 levels). |
+| `documentController.decreaseIndent(int blockIndex)` | `blockIndex` | Decreases list nesting depth/outdents the list block. |
+
+##### Code Example: Programmatic List Customization
+```dart
+final controller = SmartEditorController();
+
+// Convert current block to a Bullet List
+controller.setBlockType(BlockType.bulletList);
+
+// Convert current block to a Numbered List
+controller.setBlockType(BlockType.orderedList);
+
+// Increase Indentation on the active block index
+final activeIndex = controller.documentController.focusedBlockIndex;
+controller.documentController.increaseIndent(activeIndex);
+```
+
 ---
 
 ## 🎛️ Toolbar Customization
@@ -377,7 +441,6 @@ SmartEditor(
 - [ ] **Markdown Shortcuts**: Auto-format headers and lists during typing.
 - [ ] **Find & Replace**: Native search overlay with match highlighting.
 - [ ] **Image Blocks**: Support for network/local images with resize handles.
-- [ ] **Table Support**: Semantic HTML tables with row/column management.
 - [ ] **Code Blocks**: Syntax highlighting for 100+ languages.
 - [ ] **Hyperlinks**: Comprehensive link insertion and management dialogs.
 - [ ] **Focus Mode**: Zen mode for distraction-free writing.

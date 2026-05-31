@@ -13,6 +13,7 @@ import 'groups/alignment_button_group.dart';
 import 'groups/list_button_group.dart';
 import 'groups/history_button_group.dart';
 import 'groups/color_button_group.dart';
+import 'groups/table_button_group.dart';
 
 /// A premium Material 3 toolbar for the flutter smart editor.
 class SmartToolbar extends StatefulWidget {
@@ -173,8 +174,16 @@ class SmartToolbarState extends State<SmartToolbar> {
     } else {
       final sel = _getEffectiveSelection().$2;
       if (sel != null && blockIndex >= 0) {
-        final formats =
-            widget.documentController.getFormatAt(blockIndex, sel.start);
+        // Use cell-level format when inside a table
+        final tableInfo = widget.controller.focusedTableInfo;
+        final Map<SmartButtonType, dynamic> formats;
+        if (tableInfo != null) {
+          formats = widget.documentController.getCellFormatAt(
+              tableInfo.blockIndex, tableInfo.row, tableInfo.col, sel.start);
+        } else {
+          formats =
+              widget.documentController.getFormatAt(blockIndex, sel.start);
+        }
         updateFormatState(blockIndex, formats);
       }
     }
@@ -188,7 +197,13 @@ class SmartToolbarState extends State<SmartToolbar> {
 
     if (type == SmartButtonType.blockType) {
       final newType = value as BlockType;
-      widget.documentController.changeBlockType(blockIndex, newType);
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.changeCellBlockType(
+            tableInfo.blockIndex, tableInfo.row, tableInfo.col, newType);
+      } else {
+        widget.documentController.changeBlockType(blockIndex, newType);
+      }
       widget.onFormatApplied?.call();
       _syncToolbarAfterDocumentChange();
       _finishToolbarAction();
@@ -200,7 +215,14 @@ class SmartToolbarState extends State<SmartToolbar> {
         type == SmartButtonType.alignRight ||
         type == SmartButtonType.alignJustify) {
       final alignment = value as SmartTextAlign;
-      widget.documentController.setAlignment(blockIndex, alignment);
+      // Route to cell alignment when inside a table
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.setCellAlignment(
+            tableInfo.blockIndex, tableInfo.row, tableInfo.col, alignment);
+      } else {
+        widget.documentController.setAlignment(blockIndex, alignment);
+      }
       widget.onFormatApplied?.call();
       _syncToolbarAfterDocumentChange();
       _finishToolbarAction();
@@ -208,14 +230,26 @@ class SmartToolbarState extends State<SmartToolbar> {
     }
 
     if (type == SmartButtonType.ul || type == SmartButtonType.bulletList) {
-      widget.documentController.toggleList(blockIndex, SmartListType.bullet);
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.toggleCellList(
+            tableInfo.blockIndex, tableInfo.row, tableInfo.col, SmartListType.bullet);
+      } else {
+        widget.documentController.toggleList(blockIndex, SmartListType.bullet);
+      }
       widget.onFormatApplied?.call();
       _syncToolbarAfterDocumentChange();
       _finishToolbarAction();
       return;
     }
     if (type == SmartButtonType.ol || type == SmartButtonType.orderedList) {
-      widget.documentController.toggleList(blockIndex, SmartListType.ordered);
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.toggleCellList(
+            tableInfo.blockIndex, tableInfo.row, tableInfo.col, SmartListType.ordered);
+      } else {
+        widget.documentController.toggleList(blockIndex, SmartListType.ordered);
+      }
       widget.onFormatApplied?.call();
       _syncToolbarAfterDocumentChange();
       _finishToolbarAction();
@@ -225,6 +259,74 @@ class SmartToolbarState extends State<SmartToolbar> {
       widget.documentController.insertHorizontalRule(blockIndex);
       widget.onFormatApplied?.call();
       _syncToolbarAfterDocumentChange();
+      _finishToolbarAction();
+      return;
+    }
+
+    // Table operations
+    if (type == SmartButtonType.insertTable) {
+      final dims = value as Map<String, int>;
+      widget.documentController.insertTable(
+        blockIndex,
+        rows: dims['rows'] ?? 2,
+        cols: dims['cols'] ?? 2,
+      );
+      widget.onFormatApplied?.call();
+      _syncToolbarAfterDocumentChange();
+      _finishToolbarAction();
+      return;
+    }
+    if (type == SmartButtonType.insertRow) {
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.insertTableRow(
+            tableInfo.blockIndex, tableInfo.row + 1);
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+      return;
+    }
+    if (type == SmartButtonType.insertColumn) {
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.insertTableColumn(
+            tableInfo.blockIndex, tableInfo.col + 1);
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+      return;
+    }
+    if (type == SmartButtonType.deleteRow) {
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.removeTableRow(
+            tableInfo.blockIndex, tableInfo.row);
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+      return;
+    }
+    if (type == SmartButtonType.deleteColumn) {
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.removeTableColumn(
+            tableInfo.blockIndex, tableInfo.col);
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+      return;
+    }
+    if (type == SmartButtonType.deleteTable) {
+      final tableInfo = widget.controller.focusedTableInfo;
+      if (tableInfo != null) {
+        widget.documentController.deleteTable(tableInfo.blockIndex);
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
       _finishToolbarAction();
       return;
     }
@@ -259,12 +361,22 @@ class SmartToolbarState extends State<SmartToolbar> {
 
     if (type == SmartButtonType.clearFormatting) {
       if (selection != null && !selection.isCollapsed) {
-        widget.documentController.toggleFormat(
-          blockIndex,
-          selection.start,
-          selection.end,
-          SmartButtonType.clearFormatting,
-        );
+        final tableInfo = widget.controller.focusedTableInfo;
+        if (tableInfo != null) {
+          widget.documentController.clearCellFormat(
+            tableInfo.blockIndex,
+            tableInfo.row,
+            tableInfo.col,
+            selection.start,
+            selection.end,
+          );
+        } else {
+          widget.documentController.clearFormat(
+            blockIndex,
+            selection.start,
+            selection.end,
+          );
+        }
         widget.onFormatApplied?.call();
       }
       _syncToolbarAfterDocumentChange();
@@ -298,16 +410,30 @@ class SmartToolbarState extends State<SmartToolbar> {
 
     final start = selection.start;
     final end = selection.end;
-    if (_isBoolToggleType(type) && value == null) {
-      widget.documentController.toggleFormat(blockIndex, start, end, type);
+    // Route formatting to cell when inside a table
+    final tableInfo = widget.controller.focusedTableInfo;
+    if (tableInfo != null) {
+      if (_isBoolToggleType(type) && value == null) {
+        widget.documentController.toggleCellFormat(
+            tableInfo.blockIndex, tableInfo.row, tableInfo.col,
+            start, end, type);
+      } else {
+        widget.documentController.applyCellFormat(
+            tableInfo.blockIndex, tableInfo.row, tableInfo.col,
+            start, end, type, value);
+      }
     } else {
-      widget.documentController.applyFormat(
-        blockIndex,
-        start,
-        end,
-        type,
-        value,
-      );
+      if (_isBoolToggleType(type) && value == null) {
+        widget.documentController.toggleFormat(blockIndex, start, end, type);
+      } else {
+        widget.documentController.applyFormat(
+          blockIndex,
+          start,
+          end,
+          type,
+          value,
+        );
+      }
     }
     widget.onFormatApplied?.call();
     _syncToolbarAfterDocumentChange();
@@ -568,7 +694,20 @@ class SmartToolbarState extends State<SmartToolbar> {
           onFormatApplied: widget.onFormatApplied,
         ));
       } else if (group is SmartInsertButtons) {
-        // Placeholder for future expansion
+        final isInTable = widget.controller.isInsideTable;
+        items.add(TableButtonGroup(
+          group: group,
+          onAction: _onToolbarAction,
+          onSurface: onSurface,
+          activeColor: activeColor,
+          activeBg: activeBg,
+          disabledColor: disabledColor,
+          enabled: _enabled,
+          isInsideTable: isInTable,
+          itemHeight: widget.settings.itemHeight,
+          buttonIconSize: widget.settings.buttonIconSize,
+          isDarkMode: widget.isDarkMode,
+        ));
       }
     }
 

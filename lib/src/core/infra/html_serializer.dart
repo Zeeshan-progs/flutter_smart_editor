@@ -32,6 +32,12 @@ class SmartHtmlSerializer {
         continue;
       }
 
+      if (block is TableNode) {
+        buffer.write(_serializeTable(block));
+        i++;
+        continue;
+      }
+
       if (block is ListItemNode) {
         // Collect the entire contiguous list group
         int end = i;
@@ -48,6 +54,74 @@ class SmartHtmlSerializer {
     final html = buffer.toString();
     // Strip any ZWSP characters used by the mobile backspace bridge
     return html.replaceAll('\u200B', '');
+  }
+
+  /// Serializes a [TableNode] into `<table>` HTML.
+  String _serializeTable(TableNode table) {
+    final buf = StringBuffer();
+
+    // Table opening with optional onTagSerialize callback
+    final customTable = onTagSerialize?.call(
+        SmartTagType.table, 'table', {}, {}, '');
+    if (customTable != null) return customTable;
+
+    buf.write('<table>');
+
+    for (int r = 0; r < table.rows.length; r++) {
+      final isHeader = table.hasHeaderRow && r == 0;
+
+      // Row opening
+      final customRow = onTagSerialize?.call(
+          SmartTagType.tableRow, 'tr', {}, {}, '');
+      if (customRow == null) buf.write('<tr>');
+
+      for (final cell in table.rows[r]) {
+        final cellTag = isHeader ? 'th' : 'td';
+        final cellType = isHeader ? SmartTagType.tableHeaderCell : SmartTagType.tableCell;
+
+        // Build cell content
+        final contentBuf = StringBuffer();
+        if (cell.block is ListItemNode) {
+          contentBuf.write(_serializeListGroup([cell.block as ListItemNode]));
+        } else if (cell.block is ParagraphNode) {
+          for (final span in cell.spans) {
+            _serializeSpan(span, contentBuf);
+          }
+        } else {
+          _serializeBlock(cell.block, contentBuf);
+        }
+
+        // Build cell styles
+        final cellStyles = <String, String>{};
+        if (cell.alignment != SmartTextAlign.left) {
+          cellStyles['text-align'] = _alignToCSS(cell.alignment);
+        }
+        if (cell.backgroundColor != null) {
+          cellStyles['background-color'] = '#${_colorToHex(cell.backgroundColor!)}';
+        }
+
+        final cellContent = contentBuf.toString();
+        final customCell = onTagSerialize?.call(
+            cellType, cellTag, {}, cellStyles, cellContent);
+        if (customCell != null) {
+          buf.write(customCell);
+        } else {
+          if (cellStyles.isNotEmpty) {
+            final styleStr = cellStyles.entries
+                .map((e) => '${e.key}: ${e.value}')
+                .join('; ');
+            buf.write('<$cellTag style="$styleStr">$cellContent</$cellTag>');
+          } else {
+            buf.write('<$cellTag>$cellContent</$cellTag>');
+          }
+        }
+      }
+
+      if (customRow == null) buf.write('</tr>');
+    }
+
+    buf.write('</table>');
+    return buf.toString();
   }
 
   /// Serializes a [HorizontalRuleNode] as `<hr/>`

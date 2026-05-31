@@ -75,6 +75,12 @@ class SmartHtmlParser {
       return;
     }
 
+    // Table
+    if (tag == 'table') {
+      _processTableElement(element, blocks);
+      return;
+    }
+
     // Handle block-level elements
     if (_isBlockTag(tag)) {
       final block = _createBlock(tag, element);
@@ -96,7 +102,7 @@ class SmartHtmlParser {
   bool _isBlockTag(String tag) {
     return const {
       'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div',
-      'ul', 'ol', 'hr',
+      'ul', 'ol', 'hr', 'table',
     }.contains(tag);
   }
 
@@ -228,6 +234,111 @@ class SmartHtmlParser {
       if (style.contains('justify')) return SmartTextAlign.justify;
     }
     return SmartTextAlign.left;
+  }
+
+  // ─── Table Parsing ──────────────────────────────────────────
+
+  /// Processes a <table> element into a [TableNode].
+  void _processTableElement(dom.Element tableElement, List<BlockNode> blocks) {
+    final rows = <List<TableCellNode>>[];
+    bool hasHeader = false;
+
+    for (final child in tableElement.children) {
+      final tag = child.localName?.toLowerCase() ?? '';
+
+      // Handle <thead>, <tbody>, <tfoot> wrappers
+      if (tag == 'thead' || tag == 'tbody' || tag == 'tfoot') {
+        if (tag == 'thead') hasHeader = true;
+        for (final row in child.children) {
+          if (row.localName?.toLowerCase() == 'tr') {
+            rows.add(_parseTableRow(row));
+          }
+        }
+      } else if (tag == 'tr') {
+        rows.add(_parseTableRow(child));
+      }
+    }
+
+    if (rows.isNotEmpty) {
+      blocks.add(TableNode(
+        rows: rows,
+        hasHeaderRow: hasHeader,
+      ));
+    }
+  }
+
+  /// Parses a single <tr> element into a list of [TableCellNode]s.
+  List<TableCellNode> _parseTableRow(dom.Element trElement) {
+    final cells = <TableCellNode>[];
+    for (final cell in trElement.children) {
+      final tag = cell.localName?.toLowerCase() ?? '';
+      if (tag == 'td' || tag == 'th') {
+        // Parse cell-level styles (e.g. background-color, text-align)
+        Color? bgColor;
+        SmartTextAlign cellAlign = SmartTextAlign.left;
+        final style = cell.attributes['style'] ?? '';
+        if (style.isNotEmpty) {
+          if (style.contains('background-color')) {
+            final match =
+                RegExp(r'background-color:\s*([^;]+)').firstMatch(style);
+            if (match != null) {
+              bgColor = _parseColor(match.group(1)!.trim());
+            }
+          }
+          if (style.contains('text-align')) {
+            if (style.contains('center')) {
+              cellAlign = SmartTextAlign.center;
+            } else if (style.contains('right')) {
+              cellAlign = SmartTextAlign.right;
+            } else if (style.contains('justify')) {
+              cellAlign = SmartTextAlign.justify;
+            }
+          }
+        }
+
+        // Parse content
+        BlockNode? blockFromContent;
+        final children = cell.children;
+
+        // If there's exactly one child and it's a block-level element, parse it directly
+        if (children.length == 1) {
+          final childTag = children.first.localName?.toLowerCase() ?? '';
+          if (_isBlockTag(childTag)) {
+            blockFromContent = _createBlock(childTag, children.first);
+          } else if (childTag == 'ul' || childTag == 'ol') {
+            final listBlocks = <BlockNode>[];
+            _processListElement(
+                children.first,
+                listBlocks,
+                childTag == 'ul' ? SmartListType.bullet : SmartListType.ordered,
+                0,
+                null);
+            if (listBlocks.isNotEmpty) blockFromContent = listBlocks.first;
+          }
+        }
+
+        BlockNode finalBlock;
+        if (blockFromContent != null) {
+          finalBlock = blockFromContent;
+          // Apply cell alignment if the block doesn't have specific alignment
+          if (finalBlock.alignment == SmartTextAlign.left &&
+              cellAlign != SmartTextAlign.left) {
+            finalBlock.alignment = cellAlign;
+          }
+        } else {
+          final spans = <TextFormatSpan>[];
+          _extractInlineSpans(cell, spans, _InlineFormat());
+          if (spans.isEmpty) spans.add(TextFormatSpan.plain(''));
+          finalBlock = ParagraphNode(spans: spans, alignment: cellAlign);
+        }
+
+        cells.add(TableCellNode(
+          backgroundColor: bgColor,
+          block: finalBlock,
+        ));
+      }
+    }
+    return cells;
   }
 
   /// Recursively extracts inline spans from an element's children

@@ -48,6 +48,18 @@ enum SmartButtonType {
   bulletList,
   orderedList,
   horizontalRule,
+
+  // Table operations
+  insertTable,
+  insertRow,
+  insertColumn,
+  addRowAbove,
+  addRowBelow,
+  deleteRow,
+  addColumnLeft,
+  addColumnRight,
+  deleteColumn,
+  deleteTable,
 }
 
 /// Identifies a toolbar dropdown type (used in onDropdownChanged callback)
@@ -73,6 +85,7 @@ enum BlockType {
   bulletList,
   orderedList,
   horizontalRule,
+  table,
 }
 
 /// The type of list for a list item
@@ -186,4 +199,16 @@ enum SmartTagType {
 
   /// A horizontal rule (<hr>)
   horizontalRule,
+
+  /// A table element (<table>)
+  table,
+
+  /// A table row (<tr>)
+  tableRow,
+
+  /// A table cell (<td>)
+  tableCell,
+
+  /// A table header cell (<th>)
+  tableHeaderCell,
 }

@@ -68,6 +68,9 @@ class SmartEditorSettings {
     this.defaultBulletStyle = SmartBulletStyle.filledCircle,
     this.hrStyle = const SmartHrStyle(),
     this.draggableBlockTypes,
+
+    // Tables
+    this.tableStyle = const SmartTableStyle(),
   });
 
   // ─── Core & HTML ──────────────────────────────────────────────
@@ -235,6 +238,11 @@ class SmartEditorSettings {
   /// If null or empty, no blocks can be dragged.
   /// Example: {BlockType.horizontalRule, BlockType.heading1}
   final Set<BlockType>? draggableBlockTypes;
+
+  // ─── Tables ────────────────────────────────────────────────
+
+  /// Styling configuration for table blocks.
+  final SmartTableStyle tableStyle;
 }
 
 /// Styling configuration for the `<hr>` horizontal rule block.
@@ -256,5 +264,32 @@ class SmartHrStyle {
     this.thickness = 1.0,
     this.verticalSpacing = 8.0,
     this.borderRadius,
+  });
+}
+
+/// Styling configuration for table blocks.
+class SmartTableStyle {
+  /// Color of the table border lines. Defaults to light grey.
+  final Color borderColor;
+
+  /// Width of the table border lines in logical pixels. Defaults to 1.0.
+  final double borderWidth;
+
+  /// Padding inside each table cell. Defaults to 8px on all sides.
+  final EdgeInsets cellPadding;
+
+  /// Background color for the header row (first row when `hasHeaderRow` is true).
+  /// If null, uses the same background as other cells.
+  final Color? headerBackgroundColor;
+
+  /// Whether to show grid lines between cells. Defaults to true.
+  final bool showGridLines;
+
+  const SmartTableStyle({
+    this.borderColor = const Color(0xFFDDDDDD),
+    this.borderWidth = 1.0,
+    this.cellPadding = const EdgeInsets.all(8),
+    this.headerBackgroundColor,
+    this.showGridLines = true,
   });
 }
