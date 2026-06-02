@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../../core/document/document.dart';
 import '../../core/document/document_controller.dart';
 import '../../core/infra/html_serializer.dart';
@@ -8,6 +9,7 @@ import '../../models/editor_settings.dart';
 import '../../models/enums.dart';
 import '../../models/pending_inline_format.dart';
 import '../blocks/block_widget.dart';
+import '../blocks/table_block_widget.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import '../../core/infra/html_parser.dart';
 import 'keyboard_done_overlay.dart';
@@ -39,15 +41,22 @@ class SmartEditorWidget extends StatefulWidget {
 class SmartEditorWidgetState extends State<SmartEditorWidget> {
   final Map<String, FocusNode> _focusNodes = {};
   final Map<String, GlobalKey<BlockWidgetState>> _blockKeys = {};
+  final Map<String, GlobalKey<TableBlockWidgetState>> _tableBlockKeys = {};
   final SmartHtmlSerializer _serializer = SmartHtmlSerializer();
   int _focusedBlockIndex = 0;
   bool _initialized = false;
   bool _isTyping = false;
 
+  /// Table cell focus tracking.
+  int _focusedCellRow = -1;
+  int _focusedCellCol = -1;
+
   /// Pending inline style at caret (no selection). Applied to the next insert.
   PendingInlineFormat? _pendingInline;
   int? _pendingFormatOffset;
   int? _pendingFormatBlockIndex;
+  int? _pendingFormatCellRow;
+  int? _pendingFormatCellCol;
 
   /// Last non-collapsed range, retained when the field loses focus (e.g. toolbar tap).
   TextSelection? _toolbarRangeSelection;
@@ -72,7 +81,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     _syncFocusNodes();
 
     _docController.addListener(_onDocChanged);
-    
+
     // Connect message callback
     _docController.onMessage = (msg) {
       if (!mounted) return;
@@ -86,7 +95,6 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       if (!_initialized) {
         _initialized = true;
         widget.editorSettings.onInit?.call();
-
         if (widget.editorSettings.autofocus && _document.blocks.isNotEmpty) {
           _focusNodes[_document.blocks[0].id]?.requestFocus();
         }
@@ -105,8 +113,19 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   void _onDocChanged() {
     if (!mounted) return;
-
     rebuild();
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted) return;
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(fn);
+      });
+    } else {
+      setState(fn);
+    }
   }
 
   /// Synchronizes the focus nodes and block keys with the document blocks
@@ -577,17 +596,13 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
     // Probe format at the start of the actual characters in selection
     int probeOffset = minOffset;
-    if (minOffset != maxOffset &&
-        minOffset < _document.blocks[blockIndex].textLength) {
-      probeOffset = minOffset + 1;
-    }
 
     final formats = _getMergedFormats(blockIndex, probeOffset);
     widget.editorSettings.onChangeSelection?.call(formats);
     widget.onFormatStateChanged?.call(blockIndex, formats);
 
     // Notify listeners so the public controller (which queries our selection) updates the toolbar
-    _docController.notifyListeners();
+    _docController.refresh();
   }
 
   /// Called when a block is reordered
@@ -659,10 +674,25 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   void setPendingInlineFormat(PendingInlineFormat format) {
     setState(() {
       _pendingInline = format;
-      final id = _document.blocks[_focusedBlockIndex].id;
-      final currentOffset = _blockKeys[id]?.currentState?.cursorOffset;
-      _pendingFormatOffset = currentOffset;
-      _pendingFormatBlockIndex = _focusedBlockIndex;
+      final info = focusedTableInfo;
+      if (info != null) {
+        _pendingFormatBlockIndex = info.blockIndex;
+        _pendingFormatCellRow = info.row;
+        _pendingFormatCellCol = info.col;
+
+        final tableId = _document.blocks[info.blockIndex].id;
+        final rawOffset =
+            _tableBlockKeys[tableId]?.currentState?.cursorOffset ?? 1;
+        _pendingFormatOffset = (rawOffset - 1).clamp(0, 1 << 30);
+      } else {
+        _pendingFormatCellRow = null;
+        _pendingFormatCellCol = null;
+
+        final id = _document.blocks[_focusedBlockIndex].id;
+        final rawOffset = _blockKeys[id]?.currentState?.cursorOffset ?? 1;
+        _pendingFormatOffset = (rawOffset - 1).clamp(0, 1 << 30);
+        _pendingFormatBlockIndex = _focusedBlockIndex;
+      }
     });
   }
 
@@ -672,8 +702,22 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
         _focusedBlockIndex >= _document.blocks.length) {
       return {};
     }
-    final id = _document.blocks[_focusedBlockIndex].id;
-    final sel = _blockKeys[id]?.currentState?.selection;
+    TextSelection? sel;
+    final info = focusedTableInfo;
+    if (info != null) {
+      final tableId = _document.blocks[info.blockIndex].id;
+      final raw = _tableBlockKeys[tableId]?.currentState?.selection;
+      if (raw != null && raw.isValid) {
+        sel = _normalizeTextSelection(raw);
+      }
+    } else {
+      final id = _document.blocks[_focusedBlockIndex].id;
+      final raw = _blockKeys[id]?.currentState?.selection;
+      if (raw != null && raw.isValid) {
+        sel = _normalizeTextSelection(raw);
+      }
+    }
+
     int offset = sel?.baseOffset ?? 0;
 
     if (sel != null &&
@@ -698,17 +742,37 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   /// Returns the cursor offset in the focused block
   int? get cursorOffset {
     if (_focusedBlockIndex >= _document.blocks.length) return null;
-    return _blockKeys[_document.blocks[_focusedBlockIndex].id]
+    final info = focusedTableInfo;
+    if (info != null) {
+      final tableId = _document.blocks[info.blockIndex].id;
+      final raw = _tableBlockKeys[tableId]?.currentState?.cursorOffset;
+      if (raw == null) return null;
+      return (raw - 1).clamp(0, 1 << 30);
+    }
+
+    final raw = _blockKeys[_document.blocks[_focusedBlockIndex].id]
         ?.currentState
         ?.cursorOffset;
+    if (raw == null) return null;
+    return (raw - 1).clamp(0, 1 << 30);
   }
 
   /// Returns the live selection in the focused block (may be collapsed after unfocus).
   TextSelection? get selection {
     if (_focusedBlockIndex >= _document.blocks.length) return null;
-    return _blockKeys[_document.blocks[_focusedBlockIndex].id]
+    final info = focusedTableInfo;
+    if (info != null) {
+      final tableId = _document.blocks[info.blockIndex].id;
+      final raw = _tableBlockKeys[tableId]?.currentState?.selection;
+      if (raw == null || !raw.isValid) return null;
+      return _normalizeTextSelection(raw);
+    }
+
+    final raw = _blockKeys[_document.blocks[_focusedBlockIndex].id]
         ?.currentState
         ?.selection;
+    if (raw == null || !raw.isValid) return null;
+    return _normalizeTextSelection(raw);
   }
 
   /// Selection used by the toolbar: live range, else last range before focus was lost.
@@ -717,9 +781,19 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
         _focusedBlockIndex >= _document.blocks.length) {
       return null;
     }
-    final live = _blockKeys[_document.blocks[_focusedBlockIndex].id]
-        ?.currentState
-        ?.selection;
+    TextSelection? live;
+    final info = focusedTableInfo;
+    if (info != null) {
+      final tableId = _document.blocks[info.blockIndex].id;
+      final raw = _tableBlockKeys[tableId]?.currentState?.selection;
+      if (raw != null && raw.isValid) live = _normalizeTextSelection(raw);
+    } else {
+      final raw = _blockKeys[_document.blocks[_focusedBlockIndex].id]
+          ?.currentState
+          ?.selection;
+      if (raw != null && raw.isValid) live = _normalizeTextSelection(raw);
+    }
+
     if (live != null && live.isValid && !live.isCollapsed) {
       return live;
     }
@@ -734,10 +808,27 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     return live;
   }
 
+  static TextSelection _normalizeTextSelection(TextSelection raw) {
+    // BlockWidget prepends a ZWSP to the TextField text. Normalize offsets
+    // to document/model offsets by subtracting 1.
+    final base = (raw.baseOffset - 1).clamp(0, 1 << 30);
+    final extent = (raw.extentOffset - 1).clamp(0, 1 << 30);
+    return TextSelection(baseOffset: base, extentOffset: extent);
+  }
+
   /// Requests focus back to the currently focused block
   void requestEditorFocus() {
     if (_focusedBlockIndex >= 0 &&
         _focusedBlockIndex < _document.blocks.length) {
+      final info = focusedTableInfo;
+      if (info != null) {
+        final tableId = _document.blocks[info.blockIndex].id;
+        _tableBlockKeys[tableId]
+            ?.currentState
+            ?.requestFocusOnCell(info.row, info.col);
+        return;
+      }
+
       final id = _document.blocks[_focusedBlockIndex].id;
       _focusNodes[id]?.requestFocus();
     }
@@ -745,7 +836,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   /// Forces a rebuild of all blocks
   void rebuild() {
-    setState(() {
+    _safeSetState(() {
       _syncFocusNodes();
     });
     _notifyContentChanged();
@@ -773,22 +864,30 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   /// Merges pending format into the state at the given offset
   Map<SmartButtonType, dynamic> _getMergedFormats(int blockIndex, int offset) {
-    var formats = _docController.getFormatAt(blockIndex, offset);
+    final block = _document.blocks[blockIndex];
+
+    // When inside a table cell, use cell-level format state
+    Map<SmartButtonType, dynamic> formats;
+    if (block is TableNode && _focusedCellRow >= 0 && _focusedCellCol >= 0) {
+      formats = _docController.getCellFormatAt(
+          blockIndex, _focusedCellRow, _focusedCellCol, offset);
+    } else {
+      formats = _docController.getFormatAt(blockIndex, offset);
+      // Include block-level alignment
+      formats[SmartButtonType.blockType] = block.blockType;
+      formats[SmartButtonType.alignLeft] =
+          block.alignment == SmartTextAlign.left;
+      formats[SmartButtonType.alignCenter] =
+          block.alignment == SmartTextAlign.center;
+      formats[SmartButtonType.alignRight] =
+          block.alignment == SmartTextAlign.right;
+      formats[SmartButtonType.alignJustify] =
+          block.alignment == SmartTextAlign.justify;
+    }
 
     if (_pendingInline != null) {
       _pendingInline!.mergeIntoToolbarMap(formats);
     }
-
-    // Always include block-level properties to keep toolbar in sync
-    final block = _document.blocks[blockIndex];
-    formats[SmartButtonType.blockType] = block.blockType;
-    formats[SmartButtonType.alignLeft] = block.alignment == SmartTextAlign.left;
-    formats[SmartButtonType.alignCenter] =
-        block.alignment == SmartTextAlign.center;
-    formats[SmartButtonType.alignRight] =
-        block.alignment == SmartTextAlign.right;
-    formats[SmartButtonType.alignJustify] =
-        block.alignment == SmartTextAlign.justify;
 
     return formats;
   }
@@ -886,6 +985,30 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     bool showDragHandle = true,
     int? dragIndex,
   }) {
+    // Table blocks use a separate widget
+    if (block is TableNode) {
+      _tableBlockKeys.putIfAbsent(
+        block.id,
+        () => GlobalKey<TableBlockWidgetState>(debugLabel: 'table_${block.id}'),
+      );
+      return TableBlockWidget(
+        key: _tableBlockKeys[block.id],
+        table: block,
+        blockIndex: index,
+        editorSettings: widget.editorSettings,
+        docController: _docController,
+        onCellFocusChanged: _onCellFocusChanged,
+        onCellSelectionChanged: _onCellSelectionChanged,
+        onCellTextChanged: _onCellTextChanged,
+        onCellPaste: _onCellPaste,
+        isDarkMode: isDark,
+        readOnly:
+            widget.editorSettings.disabled || widget.editorSettings.readOnly,
+        showDragHandle: showDragHandle,
+        dragIndex: dragIndex,
+      );
+    }
+
     return BlockWidget(
       key: key,
       block: block,
@@ -915,6 +1038,113 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       selectionColor: widget.editorSettings.selectionColor,
       isDarkMode: isDark,
     );
+  }
+
+  // ─── Table Cell Callbacks ─────────────────────────────────────
+
+  /// Info about the currently focused table cell, or null if not inside a table.
+  ({int blockIndex, int row, int col})? get focusedTableInfo {
+    if (_focusedBlockIndex < 0 ||
+        _focusedBlockIndex >= _document.blocks.length) {
+      return null;
+    }
+    if (_document.blocks[_focusedBlockIndex] is! TableNode) return null;
+    if (_focusedCellRow < 0 || _focusedCellCol < 0) return null;
+    return (
+      blockIndex: _focusedBlockIndex,
+      row: _focusedCellRow,
+      col: _focusedCellCol,
+    );
+  }
+
+  void _onCellFocusChanged(int blockIndex, int row, int col, bool hasFocus) {
+    if (hasFocus) {
+      _focusedBlockIndex = blockIndex;
+      _focusedCellRow = row;
+      _focusedCellCol = col;
+      widget.editorSettings.onFocus?.call();
+      KeyboardDoneOverlay.show(context);
+
+      // Report cell format state to toolbar
+      final formats = _docController.getCellFormatAt(blockIndex, row, col, 0);
+      widget.editorSettings.onChangeSelection?.call(formats);
+      widget.onFormatStateChanged?.call(blockIndex, formats);
+    } else {
+      widget.editorSettings.onBlur?.call();
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (!mounted) return;
+        final anyFocused = _focusNodes.values.any((node) => node.hasFocus);
+        if (!anyFocused) {
+          KeyboardDoneOverlay.hide();
+        }
+      });
+    }
+  }
+
+  void _onCellSelectionChanged(
+      int blockIndex, int row, int col, int base, int extent) {
+    _focusedBlockIndex = blockIndex;
+    _focusedCellRow = row;
+    _focusedCellCol = col;
+
+    final int normBase = (base - 1).clamp(0, 1 << 30);
+    final int normExtent = (extent - 1).clamp(0, 1 << 30);
+    final int minOffset = normBase < normExtent ? normBase : normExtent;
+
+    if (normBase != normExtent) {
+      _toolbarRangeSelection =
+          TextSelection(baseOffset: normBase, extentOffset: normExtent);
+      _toolbarRangeBlockIndex = blockIndex;
+    } else {
+      _toolbarRangeSelection = null;
+      _toolbarRangeBlockIndex = null;
+    }
+
+    int probeOffset = minOffset;
+
+    final formats =
+        _docController.getCellFormatAt(blockIndex, row, col, probeOffset);
+    widget.editorSettings.onChangeSelection?.call(formats);
+    widget.onFormatStateChanged?.call(blockIndex, formats);
+    _docController.refresh();
+  }
+
+  void _onCellTextChanged(int blockIndex, int row, int col, String newText) {
+    if (blockIndex < 0 || blockIndex >= _document.blocks.length) return;
+    final block = _document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _isTyping = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _isTyping = false;
+    });
+
+    final cell = block.getCell(row, col);
+    final oldText = cell.plainText;
+
+    final insertAt = _insertOffsetInOldText(oldText, newText);
+    TextFormatSpan? pendingSpan;
+    if (_pendingInline != null &&
+        _pendingFormatBlockIndex == blockIndex &&
+        _pendingFormatCellRow == row &&
+        _pendingFormatCellCol == col) {
+      pendingSpan = _pendingInline!.resolveForInsert(cell.block, insertAt);
+    }
+
+    _docController.updateCellText(
+      blockIndex,
+      row,
+      col,
+      oldText,
+      newText,
+      pendingFormat: pendingSpan,
+    );
+    _notifyContentChanged();
+  }
+
+  void _onCellPaste(int blockIndex, int row, int col) {
+    // Delegate to the same paste flow as block paste
+    _onPaste(blockIndex);
   }
 }
 

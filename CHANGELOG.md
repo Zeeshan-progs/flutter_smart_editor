@@ -8,6 +8,7 @@
 - **Atomic Group Reordering**: Move entire list groups as a single unit via drag-and-drop.
 - **Smart Deletion (Backspace)**: Multi-stage backspace logic (Out-dent -> Un-list -> Merge) and instant empty-item deletion.
 - **Mobile Optimized Backspace**: Custom ZWSP Bridge to support software keyboards on iOS and Android.
+- **Semantic Tables**: Insert and manage fully responsive HTML tables with interactive dynamic row and column insertion and deletion.
 
 ### ⚙️ Setting Updates
 

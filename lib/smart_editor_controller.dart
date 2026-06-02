@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'src/core/document/document.dart';
 import 'src/core/document/document_controller.dart';
 import 'src/core/infra/html_parser.dart';
@@ -42,14 +43,16 @@ class SmartEditorController extends ChangeNotifier {
   final bool processInputHtml;
   final bool processOutputHtml;
   final bool processNewLineAsBr;
-  
+
   bool _canPaste = false;
-  
+
   /// Callback for providing user feedback (e.g., SnackBars).
   void Function(String message)? onMessage;
 
   final UndoRedoManager _undoRedoManager = UndoRedoManager();
   late final DocumentController _documentController;
+  final SmartHtmlSerializer _serializer = SmartHtmlSerializer();
+  final SmartHtmlParser _parser = SmartHtmlParser();
 
   Timer? _clipboardTimer;
 
@@ -85,7 +88,16 @@ class SmartEditorController extends ChangeNotifier {
 
   void _onDocumentChanged() {
     _updatePasteState(); // Refresh clipboard state immediately on internal changes
-    notifyListeners();
+    _safeNotifyListeners();
+  }
+
+  void _safeNotifyListeners() {
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
+    } else {
+      notifyListeners();
+    }
   }
 
   // ─── Content Methods ──────────────────────────────────────────
@@ -119,7 +131,13 @@ class SmartEditorController extends ChangeNotifier {
   void insertText(String text) {
     final blockIndex = _editorWidgetState?.focusedBlockIndex ?? 0;
     final offset = _editorWidgetState?.cursorOffset ?? 0;
-    _documentController.insertText(blockIndex, offset, text);
+    final info = focusedTableInfo;
+    if (info != null) {
+      _documentController.insertCellText(
+          info.blockIndex, info.row, info.col, offset, text);
+    } else {
+      _documentController.insertText(blockIndex, offset, text);
+    }
     _editorWidgetState?.rebuild();
   }
 
@@ -135,7 +153,13 @@ class SmartEditorController extends ChangeNotifier {
     final offset = _editorWidgetState?.cursorOffset ?? 0;
 
     if (parsed.blocks.isNotEmpty) {
-      _documentController.insertParsedDocument(blockIndex, offset, parsed);
+      final info = focusedTableInfo;
+      if (info != null) {
+        _documentController.insertCellParsedDocument(
+            info.blockIndex, info.row, info.col, offset, parsed);
+      } else {
+        _documentController.insertParsedDocument(blockIndex, offset, parsed);
+      }
       _editorWidgetState?.rebuild();
     }
   }
@@ -167,7 +191,63 @@ class SmartEditorController extends ChangeNotifier {
 
     final start = selection.start;
     final end = selection.end;
-    _documentController.toggleFormat(blockIndex, start, end, format);
+
+    final info = focusedTableInfo;
+    if (info != null) {
+      _documentController.toggleCellFormat(
+          info.blockIndex, info.row, info.col, start, end, format);
+    } else {
+      _documentController.toggleFormat(blockIndex, start, end, format);
+    }
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Applies a specific format to the current selection.
+  void applyFormat(SmartButtonType format, dynamic value) {
+    final blockIndex = _editorWidgetState?.focusedBlockIndex ?? 0;
+    final selection = _editorWidgetState?.selection;
+    if (selection == null || selection.isCollapsed) return;
+
+    final start = selection.start;
+    final end = selection.end;
+
+    final info = focusedTableInfo;
+    if (info != null) {
+      _documentController.applyCellFormat(
+          info.blockIndex, info.row, info.col, start, end, format, value);
+    } else {
+      _documentController.applyFormat(blockIndex, start, end, format, value);
+    }
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Sets alignment on the current block or table cell.
+  void setAlignment(SmartTextAlign alignment) {
+    final blockIndex = _editorWidgetState?.focusedBlockIndex ?? 0;
+    final info = focusedTableInfo;
+    if (info != null) {
+      _documentController.setCellAlignment(
+          info.blockIndex, info.row, info.col, alignment);
+    } else {
+      _documentController.setAlignment(blockIndex, alignment);
+    }
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Clears formatting on the current selection.
+  void clearFormatting() {
+    final blockIndex = _editorWidgetState?.focusedBlockIndex ?? 0;
+    final selection = _editorWidgetState?.selection;
+    if (selection == null || selection.isCollapsed) return;
+
+    final info = focusedTableInfo;
+    if (info != null) {
+      _documentController.clearCellFormat(
+          info.blockIndex, info.row, info.col, selection.start, selection.end);
+    } else {
+      _documentController.clearFormat(
+          blockIndex, selection.start, selection.end);
+    }
     _editorWidgetState?.rebuild();
   }
 
@@ -177,7 +257,13 @@ class SmartEditorController extends ChangeNotifier {
   /// or back to paragraph.
   void setBlockType(BlockType type) {
     final blockIndex = _editorWidgetState?.focusedBlockIndex ?? 0;
-    _documentController.changeBlockType(blockIndex, type);
+    final info = focusedTableInfo;
+    if (info != null) {
+      _documentController.changeCellBlockType(
+          info.blockIndex, info.row, info.col, type);
+    } else {
+      _documentController.changeBlockType(blockIndex, type);
+    }
     _editorWidgetState?.rebuild();
   }
 
@@ -254,18 +340,20 @@ class SmartEditorController extends ChangeNotifier {
 
   void _initClipboardListener() {
     // Start periodic polling as a fallback since SystemClipboard has no native listener on all platforms
-    _clipboardTimer = Timer.periodic(const Duration(seconds: 2), (_) => _updatePasteState());
+    _clipboardTimer =
+        Timer.periodic(const Duration(seconds: 2), (_) => _updatePasteState());
     _updatePasteState(); // Initial check
   }
 
   Future<void> _updatePasteState() async {
     final reader = await SystemClipboard.instance?.read();
-    final hasContent = reader != null && 
-        (reader.canProvide(Formats.htmlText) || reader.canProvide(Formats.plainText));
-    
+    final hasContent = reader != null &&
+        (reader.canProvide(Formats.htmlText) ||
+            reader.canProvide(Formats.plainText));
+
     if (hasContent != _canPaste) {
       _canPaste = hasContent;
-      notifyListeners();
+      _safeNotifyListeners();
     }
   }
 
@@ -273,11 +361,14 @@ class SmartEditorController extends ChangeNotifier {
   Future<void> copySelection() async {
     final selection = _editorWidgetState?.selection;
     final blockIndex = _editorWidgetState?.focusedBlockIndex;
-    
-    if (selection == null || selection.isCollapsed || blockIndex == null) return;
+
+    if (selection == null || selection.isCollapsed || blockIndex == null) {
+      return;
+    }
 
     final html = _documentController.getSelectedHtml(blockIndex, selection);
-    final plainText = _documentController.getSelectedPlainText(blockIndex, selection);
+    final plainText =
+        _documentController.getSelectedPlainText(blockIndex, selection);
 
     final item = DataWriterItem();
     if (html.isNotEmpty) {
@@ -286,6 +377,7 @@ class SmartEditorController extends ChangeNotifier {
     item.add(Formats.plainText(plainText));
 
     await SystemClipboard.instance?.write([item]);
+    await _updatePasteState(); // Refresh canPaste state immediately
     onMessage?.call('Copied to clipboard');
   }
 
@@ -336,5 +428,61 @@ class SmartEditorController extends ChangeNotifier {
     }
 
     return html;
+  }
+
+  // ─── Table Methods ─────────────────────────────────────────────
+
+  /// Returns info about the currently focused table cell, or null.
+  ({int blockIndex, int row, int col})? get focusedTableInfo =>
+      _editorWidgetState?.focusedTableInfo;
+
+  /// Whether the cursor is currently inside a table cell.
+  bool get isInsideTable => focusedTableInfo != null;
+
+  /// Inserts a new table after the currently focused block.
+  void insertTable({int rows = 2, int cols = 2}) {
+    final blockIndex = _editorWidgetState?.focusedBlockIndex ?? 0;
+    _documentController.insertTable(blockIndex, rows: rows, cols: cols);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Inserts a row below the currently focused cell.
+  void insertRow() {
+    final info = focusedTableInfo;
+    if (info == null) return;
+    _documentController.insertTableRow(info.blockIndex, info.row + 1);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Inserts a column to the right of the currently focused cell.
+  void insertColumn() {
+    final info = focusedTableInfo;
+    if (info == null) return;
+    _documentController.insertTableColumn(info.blockIndex, info.col + 1);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Removes the row at the currently focused cell.
+  void deleteRow() {
+    final info = focusedTableInfo;
+    if (info == null) return;
+    _documentController.removeTableRow(info.blockIndex, info.row);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Removes the column at the currently focused cell.
+  void deleteColumn() {
+    final info = focusedTableInfo;
+    if (info == null) return;
+    _documentController.removeTableColumn(info.blockIndex, info.col);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Deletes the entire table at the currently focused block.
+  void deleteTable() {
+    final info = focusedTableInfo;
+    if (info == null) return;
+    _documentController.deleteTable(info.blockIndex);
+    _editorWidgetState?.rebuild();
   }
 }

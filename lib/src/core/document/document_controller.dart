@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_smart_editor/src/core/document/document.dart';
 import '../../models/enums.dart';
 import '../infra/html_parser.dart';
@@ -58,6 +59,16 @@ class DocumentController extends ChangeNotifier {
   void _notifyChanged() {
     document.normalize();
     notifyListeners();
+  }
+
+  /// Manually triggers logic that depends on document changes (e.g. selection updates).
+  void refresh() {
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Restoration method for undo/redo
@@ -666,6 +677,9 @@ class DocumentController extends ChangeNotifier {
       case BlockType.horizontalRule:
         newBlock = HorizontalRuleNode(id: id);
         break;
+      case BlockType.table:
+        // Tables cannot be converted to/from other block types
+        return;
     }
 
     document.blocks[blockIndex] = newBlock;
@@ -887,53 +901,538 @@ class DocumentController extends ChangeNotifier {
     _notifyChanged();
   }
 
-  // ─── Clipboard Operations ─────────────────────────────────────
-
-  /// Serializes the selected range within a block to HTML.
-  String getSelectedHtml(int blockIndex, TextSelection selection) {
-    if (blockIndex < 0 || blockIndex >= document.blocks.length) return '';
-    if (selection.isCollapsed) return '';
-
-    final block = document.blocks[blockIndex];
-    final start = selection.start;
-    final end = selection.end;
-
-    // Create a temporary block with only the selected spans
-    final selectedSpans = <TextFormatSpan>[];
-    var offset = 0;
-
-    for (var span in block.spans) {
-      final spanLen = span.text.length;
-      final spanStart = offset;
-      final spanEnd = offset + spanLen;
-
-      final intersectStart = spanStart > start ? spanStart : start;
-      final intersectEnd = spanEnd < end ? spanEnd : end;
-
-      if (intersectStart < intersectEnd) {
-        selectedSpans.add(span.copyWith(
-          text: span.text.substring(
-            intersectStart - spanStart,
-            intersectEnd - spanStart,
-          ),
-        ));
-      }
-      offset = spanEnd;
-    }
-
-    if (selectedSpans.isEmpty) return '';
-
-    // Serialize as a fragment
-    final tempDoc = Document(blocks: [ParagraphNode(spans: selectedSpans)]);
-    final serializer = SmartHtmlSerializer();
-    return serializer.serialize(tempDoc);
-  }
-
   /// Parses HTML and inserts it at the given location.
   void pasteHtml(int blockIndex, int offset, String html,
       {required SmartHtmlParser parser}) {
     if (html.isEmpty) return;
     final parsedDoc = parser.parse(html);
     insertParsedDocument(blockIndex, offset, parsedDoc);
+  }
+
+  // ─── Table Operations ──────────────────────────────────────────
+
+  /// Inserts an empty table after [blockIndex].
+  ///
+  /// Also inserts an empty paragraph after the table so the user
+  /// can escape the table by pressing Enter or Down at the end.
+  void insertTable(int blockIndex, {int rows = 2, int cols = 2}) {
+    _saveState();
+    final table = TableNode.empty(rows: rows, cols: cols);
+    final insertAt = (blockIndex + 1).clamp(0, document.blocks.length);
+    document.blocks.insert(insertAt, table);
+    // Insert an empty paragraph after the table for cursor escape
+    document.blocks.insert(insertAt + 1, ParagraphNode());
+    _notifyChanged();
+  }
+
+  /// Updates the text in a specific table cell.
+  ///
+  /// Uses the same span-diffing logic as [updateBlockText] but
+  /// operates on the cell's spans rather than the block's spans.
+  void updateCellText(
+      int blockIndex, int row, int col, String oldText, String newText,
+      {TextFormatSpan? pendingFormat}) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+    if (row < 0 || row >= block.rowCount || col < 0 || col >= block.colCount) {
+      return;
+    }
+    if (oldText == newText) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+
+    // Find the diff between old and new text
+    int commonPrefix = 0;
+    while (commonPrefix < oldText.length &&
+        commonPrefix < newText.length &&
+        oldText[commonPrefix] == newText[commonPrefix]) {
+      commonPrefix++;
+    }
+
+    int commonSuffix = 0;
+    while (commonSuffix < (oldText.length - commonPrefix) &&
+        commonSuffix < (newText.length - commonPrefix) &&
+        oldText[oldText.length - 1 - commonSuffix] ==
+            newText[newText.length - 1 - commonSuffix]) {
+      commonSuffix++;
+    }
+
+    final deleteCount = oldText.length - commonPrefix - commonSuffix;
+    final insertText =
+        newText.substring(commonPrefix, newText.length - commonSuffix);
+
+    // Delete removed text
+    if (deleteCount > 0) {
+      _deleteFromCellSpans(cell, commonPrefix, deleteCount);
+    }
+
+    // Insert new text
+    if (insertText.isNotEmpty) {
+      if (pendingFormat != null) {
+        _insertFormattedIntoCellSpans(
+            cell, commonPrefix, insertText, pendingFormat);
+      } else {
+        _insertIntoCellSpans(cell, commonPrefix, insertText);
+      }
+    }
+
+    _notifyChanged();
+  }
+
+  /// Toggles a formatting flag on a cell's text selection.
+  void toggleCellFormat(int blockIndex, int row, int col, int start, int end,
+      SmartButtonType format) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+    if (start >= end) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    _splitCellSpanAt(cell, start);
+    _splitCellSpanAt(cell, end);
+
+    bool isActive = false;
+    var offset = 0;
+    for (final span in cell.spans) {
+      final spanEnd = offset + span.text.length;
+      if (offset >= start && spanEnd <= end && span.text.isNotEmpty) {
+        isActive = _getFormat(span, format) == true;
+        break;
+      }
+      offset = spanEnd;
+    }
+
+    offset = 0;
+    for (final span in cell.spans) {
+      final spanEnd = offset + span.text.length;
+      if (offset >= start && spanEnd <= end) {
+        _setFormat(span, format, !isActive);
+      }
+      offset = spanEnd;
+    }
+
+    cell.normalizeSpans();
+    _notifyChanged();
+  }
+
+  /// Applies a formatting value on a cell's text selection.
+  void applyCellFormat(int blockIndex, int row, int col, int start, int end,
+      SmartButtonType format, dynamic value) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+    if (start >= end) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    _splitCellSpanAt(cell, start);
+    _splitCellSpanAt(cell, end);
+
+    var offset = 0;
+    for (final span in cell.spans) {
+      final spanEnd = offset + span.text.length;
+      if (offset >= start && spanEnd <= end) {
+        _setFormat(span, format, value);
+      }
+      offset = spanEnd;
+    }
+
+    cell.normalizeSpans();
+    _notifyChanged();
+  }
+
+  /// Sets alignment on a specific table cell.
+  void setCellAlignment(
+      int blockIndex, int row, int col, SmartTextAlign alignment) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _saveState();
+    block.getCell(row, col).alignment = alignment;
+    _notifyChanged();
+  }
+
+  /// Changes the block type of a specific table cell.
+  void changeCellBlockType(
+      int blockIndex, int row, int col, BlockType newType) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    final cell = block.getCell(row, col);
+    final oldBlock = cell.block;
+    final spans = oldBlock.spans;
+    final alignment = oldBlock.alignment;
+    final id = oldBlock.id;
+
+    BlockNode newBlock;
+    switch (newType) {
+      case BlockType.paragraph:
+        newBlock = ParagraphNode(id: id, spans: spans, alignment: alignment);
+        break;
+      case BlockType.heading1:
+        newBlock =
+            HeadingNode(id: id, level: 1, spans: spans, alignment: alignment);
+        break;
+      case BlockType.heading2:
+        newBlock =
+            HeadingNode(id: id, level: 2, spans: spans, alignment: alignment);
+        break;
+      case BlockType.heading3:
+        newBlock =
+            HeadingNode(id: id, level: 3, spans: spans, alignment: alignment);
+        break;
+      case BlockType.heading4:
+        newBlock =
+            HeadingNode(id: id, level: 4, spans: spans, alignment: alignment);
+        break;
+      case BlockType.heading5:
+        newBlock =
+            HeadingNode(id: id, level: 5, spans: spans, alignment: alignment);
+        break;
+      case BlockType.heading6:
+        newBlock =
+            HeadingNode(id: id, level: 6, spans: spans, alignment: alignment);
+        break;
+      case BlockType.bulletList:
+        newBlock = ListItemNode(
+            id: id,
+            listType: SmartListType.bullet,
+            spans: spans,
+            alignment: alignment);
+        break;
+      case BlockType.orderedList:
+        newBlock = ListItemNode(
+            id: id,
+            listType: SmartListType.ordered,
+            spans: spans,
+            alignment: alignment);
+        break;
+      case BlockType.horizontalRule:
+        // Horizontal rules aren't supported inside table cells
+        return;
+      case BlockType.table:
+        // Tables cannot be nested
+        return;
+    }
+
+    _saveState();
+    cell.block = newBlock;
+    _notifyChanged();
+  }
+
+  /// Toggles a list type on a specific table cell.
+  void toggleCellList(
+      int blockIndex, int row, int col, SmartListType listType) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    final cellBlock = cell.block;
+
+    if (cellBlock is ListItemNode) {
+      if (cellBlock.listType == listType) {
+        cell.block = ParagraphNode(
+            id: cellBlock.id,
+            spans: cellBlock.spans,
+            alignment: cellBlock.alignment);
+      } else {
+        cell.block = ListItemNode(
+          id: cellBlock.id,
+          listType: listType,
+          depth: cellBlock.depth,
+          bulletStyle: cellBlock.bulletStyle,
+          spans: cellBlock.spans,
+          alignment: cellBlock.alignment,
+        );
+      }
+    } else {
+      cell.block = ListItemNode(
+        id: cellBlock.id,
+        listType: listType,
+        depth: 0,
+        spans: cellBlock.spans,
+        alignment: cellBlock.alignment,
+      );
+    }
+
+    _notifyChanged();
+  }
+
+  /// Clears formatting on a range within a table cell.
+  void clearCellFormat(
+      int blockIndex, int row, int col, int offset, int length) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+    if (length <= 0) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    final oldSpans = cell.spans;
+    final newSpans = <TextFormatSpan>[];
+
+    var currentOffset = 0;
+    for (final span in oldSpans) {
+      final spanEnd = currentOffset + span.text.length;
+      if (spanEnd <= offset || currentOffset >= offset + length) {
+        newSpans.add(span);
+      } else {
+        if (currentOffset < offset) {
+          newSpans.add(span.copyWith(
+              text: span.text.substring(0, offset - currentOffset)));
+        }
+        final startInside = currentOffset < offset ? offset - currentOffset : 0;
+        final endInside = spanEnd > offset + length
+            ? span.text.length - (spanEnd - (offset + length))
+            : span.text.length;
+        if (endInside > startInside) {
+          newSpans.add(TextFormatSpan.plain(
+              span.text.substring(startInside, endInside)));
+        }
+        if (spanEnd > offset + length) {
+          newSpans.add(span.copyWith(
+              text: span.text.substring(offset + length - currentOffset)));
+        }
+      }
+      currentOffset = spanEnd;
+    }
+
+    cell.spans = newSpans;
+    cell.normalizeSpans();
+    _notifyChanged();
+  }
+
+  /// Gets the format state at a specific offset within a table cell.
+  Map<SmartButtonType, dynamic> getCellFormatAt(
+      int blockIndex, int row, int col, int offset) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) {
+      return _defaultFormat();
+    }
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return _defaultFormat();
+
+    final cell = block.getCell(row, col);
+    if (cell.spans.isEmpty) return _defaultFormat();
+
+    final loc = cell.getSpanAt(offset);
+    if (loc.spanIndex >= cell.spans.length) return _defaultFormat();
+
+    final span = cell.spans[loc.spanIndex];
+    final cellBlock = cell.block;
+
+    return {
+      SmartButtonType.bold: span.isBold,
+      SmartButtonType.italic: span.isItalic,
+      SmartButtonType.underline: span.isUnderline,
+      SmartButtonType.strikethrough: span.isStrikethrough,
+      SmartButtonType.fontName: span.fontFamily,
+      SmartButtonType.fontSize: span.fontSize,
+      SmartButtonType.foregroundColor: span.foregroundColor,
+      SmartButtonType.highlightColor: span.backgroundColor,
+      SmartButtonType.alignLeft: cellBlock.alignment == SmartTextAlign.left,
+      SmartButtonType.alignCenter: cellBlock.alignment == SmartTextAlign.center,
+      SmartButtonType.alignRight: cellBlock.alignment == SmartTextAlign.right,
+      SmartButtonType.alignJustify:
+          cellBlock.alignment == SmartTextAlign.justify,
+      SmartButtonType.blockType: cellBlock.blockType,
+    };
+  }
+
+  /// Inserts a row into the table at [atRowIndex].
+  void insertTableRow(int blockIndex, int atRowIndex) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _saveState();
+    block.insertRow(atRowIndex);
+    _notifyChanged();
+  }
+
+  /// Removes a row from the table.
+  void removeTableRow(int blockIndex, int rowIndex) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+    if (block.rowCount <= 1) return; // Don't remove the last row
+
+    _saveState();
+    block.removeRow(rowIndex);
+    _notifyChanged();
+  }
+
+  /// Inserts a column into the table at [atColIndex].
+  void insertTableColumn(int blockIndex, int atColIndex) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _saveState();
+    block.insertColumn(atColIndex);
+    _notifyChanged();
+  }
+
+  /// Removes a column from the table.
+  void removeTableColumn(int blockIndex, int colIndex) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+    if (block.colCount <= 1) return; // Don't remove the last column
+
+    _saveState();
+    block.removeColumn(colIndex);
+    _notifyChanged();
+  }
+
+  /// Deletes an entire table, replacing it with an empty paragraph.
+  void deleteTable(int blockIndex) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (document.blocks[blockIndex] is! TableNode) return;
+
+    _saveState();
+    document.blocks[blockIndex] = ParagraphNode();
+    _notifyChanged();
+  }
+
+  // ─── Table Span Helpers ────────────────────────────────────────
+
+  /// Splits a cell's span at the given offset (cell-level equivalent of _splitSpanAt).
+  void _splitCellSpanAt(TableCellNode cell, int offset) {
+    if (offset <= 0) return;
+    var current = 0;
+    for (var i = 0; i < cell.spans.length; i++) {
+      final span = cell.spans[i];
+      final spanEnd = current + span.text.length;
+      if (offset > current && offset < spanEnd) {
+        final localOffset = offset - current;
+        final left = span.copyWith(text: span.text.substring(0, localOffset));
+        final right = span.copyWith(text: span.text.substring(localOffset));
+        cell.spans[i] = left;
+        cell.spans.insert(i + 1, right);
+        return;
+      }
+      current = spanEnd;
+    }
+  }
+
+  /// Deletes text from a cell's spans (cell-level equivalent of _deleteFromSpans).
+  void _deleteFromCellSpans(TableCellNode cell, int offset, int count) {
+    if (count <= 0) return;
+    var remaining = count;
+    var current = 0;
+
+    for (var i = 0; i < cell.spans.length && remaining > 0; i++) {
+      final span = cell.spans[i];
+      final spanEnd = current + span.text.length;
+
+      if (offset < spanEnd && (offset + remaining) > current) {
+        final deleteStart = (offset - current).clamp(0, span.text.length);
+        final deleteEnd =
+            (offset + remaining - current).clamp(0, span.text.length);
+        final deleteLen = deleteEnd - deleteStart;
+
+        span.text = span.text.substring(0, deleteStart) +
+            span.text.substring(deleteEnd);
+        remaining -= deleteLen;
+
+        if (span.text.isEmpty) {
+          cell.spans.removeAt(i);
+          i--;
+        }
+      }
+      current = spanEnd;
+    }
+
+    if (cell.spans.isEmpty) {
+      cell.spans.add(TextFormatSpan.plain(''));
+    }
+  }
+
+  /// Inserts text into a cell's spans (cell-level equivalent of _insertIntoSpans).
+  void _insertIntoCellSpans(TableCellNode cell, int offset, String text) {
+    if (text.isEmpty) return;
+
+    var current = 0;
+    for (var i = 0; i < cell.spans.length; i++) {
+      final span = cell.spans[i];
+      final spanEnd = current + span.text.length;
+
+      if (offset <= spanEnd) {
+        final localOffset = offset - current;
+        span.text = span.text.substring(0, localOffset) +
+            text +
+            span.text.substring(localOffset);
+        return;
+      }
+      current = spanEnd;
+    }
+
+    // Append to last span
+    cell.spans.last.text += text;
+  }
+
+  void _insertFormattedIntoCellSpans(
+    TableCellNode cell,
+    int offset,
+    String text,
+    TextFormatSpan format,
+  ) {
+    if (text.isEmpty) return;
+
+    _splitCellSpanAt(cell, offset);
+
+    var currentOffset = 0;
+    var insertIndex = 0;
+    for (var i = 0; i < cell.spans.length; i++) {
+      if (currentOffset >= offset) {
+        insertIndex = i;
+        break;
+      }
+      currentOffset += cell.spans[i].text.length;
+      insertIndex = i + 1;
+    }
+
+    final newSpan = format.copyWith(text: text);
+    cell.spans.insert(insertIndex, newSpan);
+  }
+
+  /// Inserts a parsed document into a specific table cell.
+  void insertCellParsedDocument(
+      int blockIndex, int row, int col, int offset, Document parsedDoc) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    final cell = block.getCell(row, col);
+    _saveState();
+
+    // For now, we only support merging text content into the cell's current block
+    // since TableCellNode holds a single block.
+    final textToInsert = parsedDoc.plainText;
+    if (textToInsert.isNotEmpty) {
+      _insertIntoCellSpans(cell, offset, textToInsert);
+    }
+
+    _notifyChanged();
+  }
+
+  /// Inserts text into a specific table cell at the given offset.
+  void insertCellText(
+      int blockIndex, int row, int col, int offset, String text) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    final cell = block.getCell(row, col);
+    _saveState();
+    _insertIntoCellSpans(cell, offset, text);
+    _notifyChanged();
   }
 }

@@ -107,7 +107,8 @@ class _SmartEditorState extends State<SmartEditor> {
   }
 
   /// Called when format state changes in the editor
-  void _onFormatStateChanged(int blockIndex, Map<SmartButtonType, dynamic> formats) {
+  void _onFormatStateChanged(
+      int blockIndex, Map<SmartButtonType, dynamic> formats) {
     _toolbarKey.currentState?.updateFormatState(blockIndex, formats);
   }
 
@@ -134,24 +135,24 @@ class _SmartEditorState extends State<SmartEditor> {
       ),
     );
 
-    final toolbarWidget =
-        widget.toolbarSettings.toolbarPosition != SmartToolbarPosition.custom
-            ? SmartToolbar(
-                key: _toolbarKey,
-                documentController: widget.controller.documentController,
-                controller: widget.controller,
-                settings: widget.toolbarSettings,
-                getFocusedBlockIndex: () =>
-                    _editorKey.currentState?.focusedBlockIndex ?? 0,
-                getSelection: () => _editorKey.currentState?.selectionForToolbar,
-                onFormatApplied: _onFormatApplied,
-                onPendingFormatChanged: _onPendingFormatChanged,
-                onFocusRequested: _onFocusRequested,
-                getMergedFormatsForToolbar: () =>
-                    _editorKey.currentState?.getToolbarFormatState() ?? {},
-                isDarkMode: isDark,
-              )
-            : null;
+    final toolbarWidget = widget.toolbarSettings.toolbarPosition !=
+            SmartToolbarPosition.custom
+        ? SmartToolbar(
+            key: _toolbarKey,
+            documentController: widget.controller.documentController,
+            controller: widget.controller,
+            settings: widget.toolbarSettings,
+            getFocusedBlockIndex: () =>
+                _editorKey.currentState?.focusedBlockIndex ?? 0,
+            getSelection: () => _editorKey.currentState?.selectionForToolbar,
+            onFormatApplied: _onFormatApplied,
+            onPendingFormatChanged: _onPendingFormatChanged,
+            onFocusRequested: _onFocusRequested,
+            getMergedFormatsForToolbar: () =>
+                _editorKey.currentState?.getToolbarFormatState() ?? {},
+            isDarkMode: isDark,
+          )
+        : null;
 
     final double fontSize = widget.editorSettings.defaultFontSize;
     final double lineHeight =
