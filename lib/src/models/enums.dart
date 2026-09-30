@@ -49,6 +49,7 @@ enum SmartButtonType {
   orderedList,
   horizontalRule,
   insertLink,
+  findReplace,
 
   // Table operations
   insertTable,

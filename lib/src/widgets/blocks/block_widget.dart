@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/document/document.dart';
 import '../../models/enums.dart';
 import '../../models/editor_settings.dart';
+import '../../models/search/search_match.dart';
 import 'rich_text_controller.dart';
 import 'list_indicator.dart';
 
@@ -33,9 +34,11 @@ class BlockWidget extends StatefulWidget {
     this.onIncreaseIndent,
     this.onDecreaseIndent,
     this.onHrTap,
-    this.orderedCount = 1,
     this.showDragHandle = true,
     this.dragIndex,
+    this.orderedCount = 0,
+    this.searchMatches = const [],
+    this.activeSearchMatchIndex = -1,
   });
 
   final BlockNode block;
@@ -59,6 +62,12 @@ class BlockWidget extends StatefulWidget {
   final double? cursorWidth;
   final Radius? cursorRadius;
   final Color? selectionColor;
+
+  /// Search match ranges for highlighting within this block.
+  final List<SearchMatch> searchMatches;
+
+  /// Index of the active search match within [searchMatches], or -1 if none.
+  final int activeSearchMatchIndex;
 
   /// The index within the ReorderableListView (may differ from blockIndex due to grouping).
   final int? dragIndex;
@@ -129,6 +138,13 @@ class BlockWidgetState extends State<BlockWidget> {
     _textController.baseFontSize = _getBlockBaseFontSize();
     _textController.baseFontWeight = _getFontWeight();
     _textController.defaultColor = defaultColor;
+    _textController.isDarkMode = widget.isDarkMode;
+    _textController.customSearchMatchColor =
+        widget.editorSettings.searchMatchColor;
+    _textController.customSearchActiveMatchColor =
+        widget.editorSettings.searchActiveMatchColor;
+    _textController.searchMatches = widget.searchMatches;
+    _textController.activeSearchMatchIndex = widget.activeSearchMatchIndex;
     _textController.refresh();
 
     if (mounted) setState(() {});
@@ -215,6 +231,17 @@ class BlockWidgetState extends State<BlockWidget> {
     final clamped = offset.clamp(0, _textController.text.length);
     _isInternalUpdate = true;
     _textController.selection = TextSelection.collapsed(offset: clamped);
+    _lastReportedSelection = _textController.selection;
+    _isInternalUpdate = false;
+  }
+
+  void setSelection(int baseOffset, int extentOffset) {
+    final len = _textController.text.length;
+    final clampedBase = baseOffset.clamp(0, len);
+    final clampedExtent = extentOffset.clamp(0, len);
+    _isInternalUpdate = true;
+    _textController.selection =
+        TextSelection(baseOffset: clampedBase, extentOffset: clampedExtent);
     _lastReportedSelection = _textController.selection;
     _isInternalUpdate = false;
   }

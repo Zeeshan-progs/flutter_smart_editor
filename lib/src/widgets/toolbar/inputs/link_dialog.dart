@@ -53,11 +53,12 @@ class _LinkDialogState extends State<LinkDialog> {
   }
 
   void _submit() {
+    final text = _textController.text.trim();
     if (_formKey.currentState!.validate()) {
       Navigator.of(context).pop({
         'action': 'insert',
         'url': _normalizeUrl(_urlController.text),
-        'text': _textController.text.trim(),
+        'text': text.isNotEmpty ? text : _urlController.text,
       });
     }
   }
@@ -120,12 +121,6 @@ class _LinkDialogState extends State<LinkDialog> {
                   prefixIcon: const Icon(Icons.title),
                 ),
                 onFieldSubmitted: (_) => _submit(),
-                validator: (val) {
-                  if (val == null || val.trim().isEmpty) {
-                    return 'Please enter display text';
-                  }
-                  return null;
-                },
               ),
               const SizedBox(height: 16),
               TextFormField(

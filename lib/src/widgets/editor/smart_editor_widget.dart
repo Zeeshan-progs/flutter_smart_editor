@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import '../../../smart_editor_controller.dart';
 import '../../core/document/document.dart';
 import '../../core/document/document_controller.dart';
@@ -10,6 +11,7 @@ import '../../core/infra/html_serializer.dart';
 import '../../models/editor_settings.dart';
 import '../../models/enums.dart';
 import '../../models/pending_inline_format.dart';
+import '../../models/search/search_index.dart';
 import '../blocks/block_widget.dart';
 import '../blocks/table_block_widget.dart';
 import '../toolbar/inputs/link_dialog.dart';
@@ -85,6 +87,12 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       oldWidget.documentController.removeListener(_onDocChanged);
       widget.documentController.addListener(_onDocChanged);
     }
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller?.searchStateNotifier
+          .removeListener(_onSearchStateChanged);
+      widget.controller?.searchStateNotifier.addListener(_onSearchStateChanged);
+      widget.controller?.attachEditor(this);
+    }
     _syncFocusNodes();
   }
 
@@ -94,6 +102,8 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     _syncFocusNodes();
 
     _docController.addListener(_onDocChanged);
+    widget.controller?.searchStateNotifier.addListener(_onSearchStateChanged);
+    widget.controller?.attachEditor(this);
 
     // Connect message callback
     _docController.onMessage = (msg) {
@@ -117,12 +127,75 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   @override
   void dispose() {
+    widget.controller?.searchStateNotifier
+        .removeListener(_onSearchStateChanged);
     _hideLinkTooltip();
     _docController.removeListener(_onDocChanged);
     for (final node in _focusNodes.values) {
       node.dispose();
     }
     super.dispose();
+  }
+
+  void _onSearchStateChanged() {
+    _safeSetState(() {});
+  }
+
+  /// Scrolls to make the block or table containing [match] visible.
+  void scrollToMatch(SearchMatch match) {
+    if (!mounted) return;
+    if (match.blockIndex < 0 || match.blockIndex >= _document.blocks.length) {
+      return;
+    }
+    final block = _document.blocks[match.blockIndex];
+
+    BuildContext? targetContext;
+    if (match.isTableCell && match.row != null && match.col != null) {
+      final tableState = _tableBlockKeys[block.id]?.currentState;
+      targetContext =
+          tableState?.getCellKey(match.row!, match.col!)?.currentContext ??
+              _tableBlockKeys[block.id]?.currentContext;
+    } else {
+      targetContext = _blockKeys[block.id]?.currentContext;
+    }
+
+    if (targetContext != null) {
+      Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+      );
+    }
+  }
+
+  /// Sets text selection to highlight/focus the exact match in the target block or table cell.
+  void selectMatch(SearchMatch match, {bool requestFocus = false}) {
+    if (!mounted) return;
+    if (match.blockIndex < 0 || match.blockIndex >= _document.blocks.length) {
+      return;
+    }
+    final block = _document.blocks[match.blockIndex];
+
+    // +1 offset accounts for the ZWSP character at index 0 of BlockWidget
+    final start = match.start + 1;
+    final end = match.end + 1;
+
+    if (match.isTableCell && match.row != null && match.col != null) {
+      final tableState = _tableBlockKeys[block.id]?.currentState;
+      if (tableState != null) {
+        if (requestFocus) {
+          tableState.focusCell(match.row!, match.col!);
+        }
+        final cellState =
+            tableState.getCellKey(match.row!, match.col!)?.currentState;
+        cellState?.setSelection(start, end);
+      }
+    } else {
+      if (requestFocus) {
+        _focusNodes[block.id]?.requestFocus();
+      }
+      _blockKeys[block.id]?.currentState?.setSelection(start, end);
+    }
   }
 
   void _onDocChanged() {
@@ -1359,7 +1432,11 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     final adaptedPadding =
         widget.editorSettings.editorPadding.copyWith(bottom: bottomPadding);
 
-    return NotificationListener<ScrollNotification>(
+    final searchController = widget.controller;
+    final enableFindReplace =
+        widget.editorSettings.enableFindReplace && searchController != null;
+
+    final editorContent = NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification is ScrollUpdateNotification ||
             notification is ScrollStartNotification) {
@@ -1418,6 +1495,31 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
         ),
       ),
     );
+
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        if (enableFindReplace) ...{
+          const SingleActivator(LogicalKeyboardKey.keyF, meta: true): () {
+            searchController.showFindReplace();
+          },
+          const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+            searchController.showFindReplace();
+          },
+          const SingleActivator(LogicalKeyboardKey.keyH, meta: true): () {
+            searchController.showFindReplace(showReplace: true);
+          },
+          const SingleActivator(LogicalKeyboardKey.keyH, control: true): () {
+            searchController.showFindReplace(showReplace: true);
+          },
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            if (searchController.searchState.isBarVisible) {
+              searchController.hideFindReplace();
+            }
+          },
+        },
+      },
+      child: editorContent,
+    );
   }
 
   Widget _buildBlock(
@@ -1429,6 +1531,29 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     bool showDragHandle = true,
     int? dragIndex,
   }) {
+    final searchState = widget.controller?.searchState;
+    final List<SearchMatch> blockMatches;
+    final int activeSearchMatchIndex;
+    final SearchMatch? activeTableMatch;
+
+    if (searchState != null && searchState.matches.isNotEmpty) {
+      blockMatches = searchState.matches
+          .where((m) => m.blockIndex == index)
+          .toList();
+      final currentMatch = searchState.currentMatch;
+      if (currentMatch != null && currentMatch.blockIndex == index) {
+        activeSearchMatchIndex = currentMatch.matchIndex;
+        activeTableMatch = currentMatch;
+      } else {
+        activeSearchMatchIndex = -1;
+        activeTableMatch = null;
+      }
+    } else {
+      blockMatches = const [];
+      activeSearchMatchIndex = -1;
+      activeTableMatch = null;
+    }
+
     // Table blocks use a separate widget
     if (block is TableNode) {
       _tableBlockKeys.putIfAbsent(
@@ -1450,6 +1575,8 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
             widget.editorSettings.disabled || widget.editorSettings.readOnly,
         showDragHandle: showDragHandle,
         dragIndex: dragIndex,
+        searchMatches: blockMatches,
+        activeSearchMatch: activeTableMatch,
       );
     }
 
@@ -1481,6 +1608,8 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
       cursorRadius: widget.editorSettings.cursorRadius,
       selectionColor: widget.editorSettings.selectionColor,
       isDarkMode: isDark,
+      searchMatches: blockMatches,
+      activeSearchMatchIndex: activeSearchMatchIndex,
     );
   }
 

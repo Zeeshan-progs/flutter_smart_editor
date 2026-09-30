@@ -5,7 +5,9 @@ import 'src/models/editor_settings.dart';
 import 'src/models/toolbar_settings.dart';
 import 'src/models/enums.dart';
 import 'src/models/pending_inline_format.dart';
+import 'src/models/search/search_state.dart';
 import 'src/widgets/editor/smart_editor_widget.dart';
+import 'src/widgets/overlay/find_replace_bar_widget.dart';
 import 'src/widgets/toolbar/smart_toolbar_widget.dart';
 
 /// A pure Flutter rich text HTML editor widget.
@@ -185,6 +187,23 @@ class _SmartEditorState extends State<SmartEditor> {
       ),
     );
 
+    final findReplaceBar = widget.editorSettings.enableFindReplace
+        ? ValueListenableBuilder<SearchState>(
+            valueListenable: widget.controller.searchStateNotifier,
+            builder: (context, state, _) {
+              if (!state.isBarVisible) return const SizedBox.shrink();
+              return FindReplaceBarWidget(
+                key: const ValueKey('smart_find_replace_bar'),
+                controller: widget.controller,
+                isDarkMode: isDark,
+                searchMatchColor: widget.editorSettings.searchMatchColor,
+                searchActiveMatchColor:
+                    widget.editorSettings.searchActiveMatchColor,
+              );
+            },
+          )
+        : null;
+
     Widget content;
     if (widget.toolbarSettings.toolbarPosition == SmartToolbarPosition.above) {
       content = Column(
@@ -192,6 +211,7 @@ class _SmartEditorState extends State<SmartEditor> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (toolbarWidget != null) toolbarWidget,
+          if (findReplaceBar != null) findReplaceBar,
           editorWidget,
         ],
       );
@@ -201,6 +221,7 @@ class _SmartEditorState extends State<SmartEditor> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (findReplaceBar != null) findReplaceBar,
           editorWidget,
           if (toolbarWidget != null) toolbarWidget,
         ],
@@ -210,7 +231,10 @@ class _SmartEditorState extends State<SmartEditor> {
       content = Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [editorWidget],
+        children: [
+          if (findReplaceBar != null) findReplaceBar,
+          editorWidget,
+        ],
       );
     }
 

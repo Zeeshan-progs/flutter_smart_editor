@@ -11,9 +11,9 @@ class SmartInsertButtons extends SmartToolbarGroup {
 
   const SmartInsertButtons({
     this.link = true,
-    this.picture = true,
-    this.audio = true,
-    this.video = true,
+    this.picture = false,
+    this.audio = false,
+    this.video = false,
     this.otherFile = false,
     this.table = true,
   });

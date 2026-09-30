@@ -7,6 +7,7 @@ import 'src/core/infra/html_serializer.dart';
 import 'src/core/document/undo_redo_manager.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'src/models/enums.dart';
+import 'src/models/search/search_index.dart';
 import 'src/widgets/editor/smart_editor_widget.dart';
 import 'src/widgets/toolbar/smart_toolbar_widget.dart';
 import 'dart:async';
@@ -88,6 +89,9 @@ class SmartEditorController extends ChangeNotifier {
 
   void _onDocumentChanged() {
     _updatePasteState(); // Refresh clipboard state immediately on internal changes
+    if (searchState.isBarVisible && searchState.query.isNotEmpty) {
+      _performSearch(preferredIndex: searchState.currentMatchIndex);
+    }
     _safeNotifyListeners();
   }
 
@@ -519,6 +523,169 @@ class SmartEditorController extends ChangeNotifier {
     // will be supported in a future version.
   }
 
+  // ─── Find & Replace ───────────────────────────────────────────
+
+  /// Notifier exposing the current state of the Find & Replace overlay and matches.
+  final ValueNotifier<SearchState> searchStateNotifier =
+      ValueNotifier<SearchState>(SearchState.empty);
+
+  /// Current find and replace state.
+  SearchState get searchState => searchStateNotifier.value;
+
+  /// Shows the Find (or Find & Replace) floating bar.
+  void showFindReplace({bool showReplace = false}) {
+    searchStateNotifier.value = searchState.copyWith(
+      isBarVisible: true,
+      isReplaceExpanded: showReplace,
+    );
+    if (searchState.query.isNotEmpty) {
+      _performSearch();
+    } else {
+      _editorWidgetState?.rebuild();
+    }
+  }
+
+  /// Closes the Find & Replace bar and clears match highlights.
+  void hideFindReplace() {
+    searchStateNotifier.value = SearchState.empty;
+    _editorWidgetState?.rebuild();
+    _editorWidgetState?.requestEditorFocus();
+  }
+
+  /// Sets the active search query and searches the document.
+  void setSearchQuery(String query) {
+    searchStateNotifier.value = searchState.copyWith(
+      query: query,
+      clearError: true,
+    );
+    _performSearch();
+  }
+
+  /// Sets the replacement text.
+  void setReplaceText(String text) {
+    searchStateNotifier.value = searchState.copyWith(replaceText: text);
+  }
+
+  /// Updates the active search options and refreshes matches.
+  void setSearchOptions(SearchOptions options) {
+    searchStateNotifier.value = searchState.copyWith(
+      options: options,
+      clearError: true,
+    );
+    _performSearch();
+  }
+
+  /// Expands or collapses the Replace row in the overlay.
+  void setReplaceExpanded(bool expanded) {
+    searchStateNotifier.value =
+        searchState.copyWith(isReplaceExpanded: expanded);
+  }
+
+  /// Navigates to the next search match.
+  void findNext() {
+    if (searchState.matches.isEmpty) return;
+    final nextIndex =
+        (searchState.currentMatchIndex + 1) % searchState.matches.length;
+    _navigateToMatch(nextIndex);
+  }
+
+  /// Navigates to the previous search match.
+  void findPrevious() {
+    if (searchState.matches.isEmpty) return;
+    final prevIndex = (searchState.currentMatchIndex -
+            1 +
+            searchState.matches.length) %
+        searchState.matches.length;
+    _navigateToMatch(prevIndex);
+  }
+
+  /// Replaces the currently focused match with [SearchState.replaceText].
+  void replaceCurrent() {
+    final current = searchState.currentMatch;
+    if (current == null) return;
+
+    _documentController.replaceMatch(
+      current,
+      searchState.replaceText,
+      preserveLink: searchState.options.preserveLinkOnReplace,
+    );
+
+    _performSearch(preferredIndex: searchState.currentMatchIndex);
+  }
+
+  /// Replaces all found occurrences across the document in a single atomic undo step.
+  /// Returns the number of occurrences replaced.
+  int replaceAll() {
+    if (searchState.matches.isEmpty) return 0;
+
+    final count = _documentController.replaceAllMatches(
+      searchState.matches,
+      searchState.replaceText,
+      preserveLinks: searchState.options.preserveLinkOnReplace,
+    );
+
+    _performSearch();
+    return count;
+  }
+
+  void _performSearch({int? preferredIndex}) {
+    final query = searchState.query;
+    if (query.isEmpty) {
+      searchStateNotifier.value = searchState.copyWith(
+        matches: const [],
+        currentMatchIndex: -1,
+        clearError: true,
+      );
+      _editorWidgetState?.rebuild();
+      return;
+    }
+
+    try {
+      final matches =
+          _documentController.findMatches(query, searchState.options);
+
+      int activeIndex = -1;
+      if (matches.isNotEmpty) {
+        if (preferredIndex != null) {
+          activeIndex = preferredIndex.clamp(0, matches.length - 1);
+        } else {
+          activeIndex = 0;
+        }
+      }
+
+      searchStateNotifier.value = searchState.copyWith(
+        matches: matches,
+        currentMatchIndex: activeIndex,
+        clearError: true,
+      );
+
+      if (activeIndex >= 0 && activeIndex < matches.length) {
+        final match = matches[activeIndex];
+        _editorWidgetState?.scrollToMatch(match);
+        _editorWidgetState?.selectMatch(match);
+      }
+
+      _editorWidgetState?.rebuild();
+    } on FormatException catch (e) {
+      searchStateNotifier.value = searchState.copyWith(
+        matches: const [],
+        currentMatchIndex: -1,
+        errorMessage: e.message,
+      );
+      _editorWidgetState?.rebuild();
+    }
+  }
+
+  void _navigateToMatch(int index) {
+    if (index < 0 || index >= searchState.matches.length) return;
+
+    searchStateNotifier.value = searchState.copyWith(currentMatchIndex: index);
+    final match = searchState.matches[index];
+    _editorWidgetState?.scrollToMatch(match);
+    _editorWidgetState?.selectMatch(match);
+    _editorWidgetState?.rebuild();
+  }
+
   // ─── Character Count ──────────────────────────────────────────
 
   /// Returns the current character count.
@@ -622,6 +789,7 @@ class SmartEditorController extends ChangeNotifier {
   void dispose() {
     _clipboardTimer?.cancel();
     _documentController.removeListener(_onDocumentChanged);
+    searchStateNotifier.dispose();
     super.dispose();
   }
 

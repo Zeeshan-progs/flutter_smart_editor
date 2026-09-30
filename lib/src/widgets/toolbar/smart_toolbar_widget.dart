@@ -366,6 +366,16 @@ class SmartToolbarState extends State<SmartToolbar> {
       return;
     }
 
+    if (type == SmartButtonType.findReplace) {
+      if (widget.controller.searchState.isBarVisible) {
+        widget.controller.hideFindReplace();
+      } else {
+        widget.controller.showFindReplace();
+      }
+      setState(() {});
+      return;
+    }
+
     if (type == SmartButtonType.clearFormatting) {
       if (selection != null && !selection.isCollapsed) {
         final tableInfo = widget.controller.focusedTableInfo;

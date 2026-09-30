@@ -261,4 +261,30 @@ void main() {
       expect(spans[1].fontSize, 20.0);
     });
   });
+
+  group('Inherited feature controllers hierarchy', () {
+    test('DocumentController inherits all feature controllers', () {
+      final docCtrl = DocumentController();
+
+      expect(docCtrl, isA<BaseDocumentController>());
+      expect(docCtrl, isA<BlockDocumentController>());
+      expect(docCtrl, isA<TextDocumentController>());
+      expect(docCtrl, isA<FormattingDocumentController>());
+      expect(docCtrl, isA<ListDocumentController>());
+      expect(docCtrl, isA<TableDocumentController>());
+      expect(docCtrl, isA<SearchDocumentController>());
+    });
+
+    test('TableDocumentController methods are directly callable and polymorphic', () {
+      final docCtrl = DocumentController();
+      final TableDocumentController tableCtrl = docCtrl;
+
+      tableCtrl.insertTable(0, rows: 3, cols: 3);
+      expect(tableCtrl.document.blocks.length, 3); // TableNode + ParagraphNode + initial block
+
+      tableCtrl.updateCellText(1, 0, 0, '', 'Cell 0,0');
+      expect((tableCtrl.document.blocks[1] as TableNode).getCell(0, 0).plainText, 'Cell 0,0');
+    });
+  });
 }
+

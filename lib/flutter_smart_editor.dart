@@ -18,3 +18,6 @@ export 'src/models/nodes/node_index.dart';
 
 // enums
 export 'src/models/enums.dart';
+
+// Search & Replace models
+export 'src/models/search/search_index.dart';

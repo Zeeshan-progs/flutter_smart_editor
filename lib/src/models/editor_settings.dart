@@ -72,6 +72,11 @@ class SmartEditorSettings {
 
     // Tables
     this.tableStyle = const SmartTableStyle(),
+
+    // Find & Replace
+    this.enableFindReplace = true,
+    this.searchMatchColor,
+    this.searchActiveMatchColor,
   });
 
   // ─── Core & HTML ──────────────────────────────────────────────
@@ -247,6 +252,19 @@ class SmartEditorSettings {
 
   /// Styling configuration for table blocks.
   final SmartTableStyle tableStyle;
+
+  // ─── Find & Replace ──────────────────────────────────────────
+
+  /// Whether the Find & Replace feature (and keyboard shortcuts) is enabled.
+  final bool enableFindReplace;
+
+  /// Custom background highlight color for inactive search matches.
+  /// If null, a theme-appropriate color is automatically used.
+  final Color? searchMatchColor;
+
+  /// Custom background highlight color for the active search match.
+  /// If null, a theme-appropriate color is automatically used.
+  final Color? searchActiveMatchColor;
 }
 
 /// Styling configuration for the `<hr>` horizontal rule block.
