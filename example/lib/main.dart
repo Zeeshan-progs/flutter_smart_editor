@@ -109,7 +109,7 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
                     copy: true,
                     paste: true,
                   ),
-                  SmartInsertButtons(table: true),
+                  SmartInsertButtons(table: true, link: true),
                 ],
               ),
             ),

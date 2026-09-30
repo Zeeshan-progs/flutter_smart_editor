@@ -35,6 +35,11 @@ class SmartTextEditingController extends TextEditingController {
     final children = <TextSpan>[];
     var textOffset = 0;
 
+    if (text.startsWith('\u200B')) {
+      children.add(const TextSpan(text: '\u200B'));
+      textOffset = 1;
+    }
+
     for (final span in formatSpans) {
       if (textOffset >= text.length) break;
 
@@ -68,9 +73,14 @@ class SmartTextEditingController extends TextEditingController {
   }
 
   TextStyle _buildSpanStyle(TextFormatSpan span) {
+    final hasLink = span.linkUrl != null && span.linkUrl!.isNotEmpty;
     final decorations = <TextDecoration>[];
-    if (span.isUnderline) decorations.add(TextDecoration.underline);
+    if (span.isUnderline || hasLink) decorations.add(TextDecoration.underline);
     if (span.isStrikethrough) decorations.add(TextDecoration.lineThrough);
+
+    const linkColor = Color(0xFF1E88E5);
+    final effectiveColor =
+        span.foregroundColor ?? (hasLink ? linkColor : defaultColor);
 
     return TextStyle(
       fontWeight: span.isBold || baseFontWeight == FontWeight.bold
@@ -81,7 +91,7 @@ class SmartTextEditingController extends TextEditingController {
           ? TextDecoration.none
           : TextDecoration.combine(decorations),
       fontSize: span.fontSize ?? baseFontSize,
-      color: span.foregroundColor ?? defaultColor,
+      color: effectiveColor,
       backgroundColor: span.backgroundColor,
       fontFamily: span.fontFamily,
     );

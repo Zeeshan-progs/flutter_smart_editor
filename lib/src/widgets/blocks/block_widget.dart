@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../../core/document/document.dart';
 import '../../models/enums.dart';
@@ -83,12 +84,14 @@ class BlockWidgetState extends State<BlockWidget> {
   late SmartTextEditingController _textController;
   static const String _zwsp = '\u200B';
   bool _isInternalUpdate = false;
+  late String _lastReportedText;
   TextSelection _lastReportedSelection =
       const TextSelection.collapsed(offset: 1);
 
   @override
   void initState() {
     super.initState();
+    _lastReportedText = widget.block.plainText;
     _textController =
         SmartTextEditingController(text: _zwsp + widget.block.plainText);
     _syncFormatSpans();
@@ -106,6 +109,7 @@ class BlockWidgetState extends State<BlockWidget> {
     final newText = _zwsp + widget.block.plainText;
     if (_textController.text != newText && !_isInternalUpdate) {
       _isInternalUpdate = true;
+      _lastReportedText = widget.block.plainText;
       final cursorPos = _textController.selection.baseOffset;
       _textController.text = newText;
       if (cursorPos <= newText.length) {
@@ -114,6 +118,8 @@ class BlockWidgetState extends State<BlockWidget> {
         );
       }
       _isInternalUpdate = false;
+    } else {
+      _lastReportedText = widget.block.plainText;
     }
   }
 
@@ -152,8 +158,9 @@ class BlockWidgetState extends State<BlockWidget> {
       return;
     }
 
-    // Snap cursor to prevent moving before ZWSP
-    if (_textController.selection.baseOffset == 0) {
+    // Snap cursor to prevent moving before ZWSP only if selection is collapsed
+    if (_textController.selection.isCollapsed &&
+        _textController.selection.baseOffset == 0) {
       _isInternalUpdate = true;
       _textController.selection = const TextSelection.collapsed(offset: 1);
       _isInternalUpdate = false;
@@ -161,7 +168,8 @@ class BlockWidgetState extends State<BlockWidget> {
 
     final plainText = currentText.substring(1); // Exclude ZWSP
 
-    if (plainText != widget.block.plainText) {
+    if (plainText != _lastReportedText && plainText != widget.block.plainText) {
+      _lastReportedText = plainText;
       if (plainText.isEmpty && widget.block.plainText.isEmpty) {
         return;
       }
@@ -214,6 +222,22 @@ class BlockWidgetState extends State<BlockWidget> {
   int get cursorOffset => _textController.selection.baseOffset;
   TextSelection get selection => _textController.selection;
   int get textLength => _textController.text.length;
+
+  /// Retrieves the underlying [RenderEditable] to compute text bounding boxes.
+  RenderEditable? get renderEditable {
+    RenderEditable? found;
+    void visitor(RenderObject child) {
+      if (child is RenderEditable) {
+        found = child;
+        return;
+      }
+      child.visitChildren(visitor);
+    }
+
+    final ro = context.findRenderObject();
+    if (ro != null) visitor(ro);
+    return found;
+  }
 
   void setTextSilently(String text, {int? cursorOffset}) {
     _isInternalUpdate = true;

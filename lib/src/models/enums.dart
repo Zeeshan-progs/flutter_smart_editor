@@ -48,6 +48,7 @@ enum SmartButtonType {
   bulletList,
   orderedList,
   horizontalRule,
+  insertLink,
 
   // Table operations
   insertTable,

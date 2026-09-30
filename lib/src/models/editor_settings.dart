@@ -62,6 +62,7 @@ class SmartEditorSettings {
     this.onKeyDown,
     this.onPaste,
     this.onTagSerialize,
+    this.onLinkTapped,
 
     // Lists & HR
     this.maxListDepth = 3,
@@ -220,6 +221,9 @@ class SmartEditorSettings {
           Map<String, String> styles,
           String content)?
       onTagSerialize;
+  
+  /// Called when a hyperlink is tapped in the editor.
+  final void Function(String url)? onLinkTapped;
 
   // ─── Lists & HR ───────────────────────────────────────────────
 

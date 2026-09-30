@@ -306,26 +306,33 @@ class DocumentController extends ChangeNotifier {
   }
 
   void _deleteFromSpans(BlockNode block, int offset, int length) {
-    var remaining = length;
-    var deleteStart = offset;
+    if (length <= 0) return;
+    final delStart = offset;
+    final delEnd = offset + length;
+    var current = 0;
 
-    while (remaining > 0 && block.spans.isNotEmpty) {
-      final loc = block.getSpanAt(deleteStart);
-      if (loc.spanIndex >= block.spans.length) break;
+    for (var i = 0; i < block.spans.length; i++) {
+      final span = block.spans[i];
+      final origLen = span.text.length;
+      final spanEnd = current + origLen;
 
-      final span = block.spans[loc.spanIndex];
-      final availableToDelete = span.text.length - loc.localOffset;
-      final toDelete =
-          remaining < availableToDelete ? remaining : availableToDelete;
-
-      span.text = span.text.substring(0, loc.localOffset) +
-          span.text.substring(loc.localOffset + toDelete);
-
-      remaining -= toDelete;
-
-      if (span.text.isEmpty && block.spans.length > 1) {
-        block.spans.removeAt(loc.spanIndex);
+      if (spanEnd > delStart && current < delEnd) {
+        final localStart = (delStart - current).clamp(0, origLen);
+        final localEnd = (delEnd - current).clamp(0, origLen);
+        if (localEnd > localStart) {
+          span.text = span.text.substring(0, localStart) +
+              span.text.substring(localEnd);
+          if (span.text.isEmpty) {
+            block.spans.removeAt(i);
+            i--;
+          }
+        }
       }
+      current = spanEnd;
+    }
+
+    if (block.spans.isEmpty) {
+      block.spans.add(TextFormatSpan.plain(''));
     }
   }
 
@@ -422,6 +429,121 @@ class DocumentController extends ChangeNotifier {
     _notifyChanged();
   }
 
+  /// Applies or removes a hyperlink over a range of text in [blockIndex].
+  void applyLink(int blockIndex, int start, int end, String? url) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (start >= end) return;
+    _saveState();
+
+    final block = document.blocks[blockIndex];
+    _splitSpanAt(block, start);
+    _splitSpanAt(block, end);
+
+    var offset = 0;
+    for (final span in block.spans) {
+      final spanEnd = offset + span.text.length;
+      if (offset >= start && spanEnd <= end) {
+        span.linkUrl = url;
+      }
+      offset = spanEnd;
+    }
+    _notifyChanged();
+  }
+
+  /// Inserts a new hyperlinked text run at [offset] in [blockIndex].
+  void insertLink(int blockIndex, int offset, String text, String url) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (text.isEmpty) return;
+    _saveState();
+
+    final block = document.blocks[blockIndex];
+    final linkSpan = TextFormatSpan(text: text, linkUrl: url);
+    _insertFormattedIntoSpans(block, offset, text, linkSpan);
+    _notifyChanged();
+  }
+
+  /// Atomically applies or replaces a hyperlink for a block, appending an unlinked space if needed.
+  /// Returns the target cursor offset (immediately after the inserted space).
+  int setLink({
+    required int blockIndex,
+    required int start,
+    required int end,
+    required String text,
+    required String url,
+  }) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return 0;
+    if (text.isEmpty) return 0;
+
+    _saveState();
+    final block = document.blocks[blockIndex];
+    final currentBlockText = block.plainText;
+    final safeStart = start.clamp(0, currentBlockText.length);
+    final safeEnd = end.clamp(safeStart, currentBlockText.length);
+
+    int linkEnd;
+    final selectedText = (safeStart < safeEnd)
+        ? currentBlockText.substring(safeStart, safeEnd)
+        : '';
+
+    if (safeStart < safeEnd && text == selectedText) {
+      _splitSpanAt(block, safeStart);
+      _splitSpanAt(block, safeEnd);
+
+      var offset = 0;
+      for (final span in block.spans) {
+        final spanEnd = offset + span.text.length;
+        if (offset >= safeStart && spanEnd <= safeEnd) {
+          span.linkUrl = url;
+        }
+        offset = spanEnd;
+      }
+      linkEnd = safeEnd;
+    } else {
+      if (safeEnd > safeStart) {
+        _deleteFromSpans(block, safeStart, safeEnd - safeStart);
+      }
+      final linkSpan = TextFormatSpan(text: text, linkUrl: url);
+      _insertFormattedIntoSpans(block, safeStart, text, linkSpan);
+      linkEnd = safeStart + text.length;
+    }
+
+    final textAfterLink = block.plainText;
+    final hasSpaceAfter =
+        linkEnd < textAfterLink.length && textAfterLink[linkEnd] == ' ';
+
+    if (!hasSpaceAfter) {
+      _insertFormattedIntoSpans(
+        block,
+        linkEnd,
+        ' ',
+        TextFormatSpan.plain(' '),
+      );
+    }
+
+    block.normalizeSpans();
+    _notifyChanged();
+
+    return linkEnd + 1;
+  }
+
+  /// Returns the link text and url at [offset] in [blockIndex], if any.
+  Map<String, String?> getLinkInfoAt(int blockIndex, int offset) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) {
+      return {'text': null, 'url': null};
+    }
+    final block = document.blocks[blockIndex];
+    if (block.spans.isEmpty) return {'text': null, 'url': null};
+
+    final loc = block.getSpanAt(offset);
+    if (loc.spanIndex >= block.spans.length) return {'text': null, 'url': null};
+
+    final span = block.spans[loc.spanIndex];
+    if (span.linkUrl != null && span.linkUrl!.isNotEmpty) {
+      return {'text': span.text, 'url': span.linkUrl};
+    }
+    return {'text': null, 'url': null};
+  }
+
   Map<SmartButtonType, dynamic> getFormatAt(int blockIndex, int offset) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) {
       return _defaultFormat();
@@ -449,6 +571,8 @@ class DocumentController extends ChangeNotifier {
       SmartButtonType.alignRight: block.alignment == SmartTextAlign.right,
       SmartButtonType.alignJustify: block.alignment == SmartTextAlign.justify,
       SmartButtonType.blockType: block.blockType,
+      SmartButtonType.insertLink:
+          span.linkUrl != null && span.linkUrl!.isNotEmpty,
     };
   }
 
@@ -462,6 +586,7 @@ class DocumentController extends ChangeNotifier {
         SmartButtonType.foregroundColor: null,
         SmartButtonType.highlightColor: null,
         SmartButtonType.alignLeft: true,
+        SmartButtonType.insertLink: false,
       };
 
   dynamic _getFormat(TextFormatSpan span, SmartButtonType format) {
@@ -482,6 +607,8 @@ class DocumentController extends ChangeNotifier {
         return span.foregroundColor;
       case SmartButtonType.highlightColor:
         return span.backgroundColor;
+      case SmartButtonType.insertLink:
+        return span.linkUrl;
       default:
         return null;
     }
@@ -513,6 +640,9 @@ class DocumentController extends ChangeNotifier {
       case SmartButtonType.highlightColor:
         span.backgroundColor = value;
         break;
+      case SmartButtonType.insertLink:
+        span.linkUrl = value as String?;
+        break;
       case SmartButtonType.clearFormatting:
         span.isBold = false;
         span.isItalic = false;
@@ -522,6 +652,7 @@ class DocumentController extends ChangeNotifier {
         span.fontSize = null;
         span.foregroundColor = null;
         span.backgroundColor = null;
+        span.linkUrl = null;
         break;
       default:
         break;
@@ -1209,6 +1340,149 @@ class DocumentController extends ChangeNotifier {
     _notifyChanged();
   }
 
+  /// Applies or removes a hyperlink over a range of text in a table cell.
+  void applyCellLink(
+      int blockIndex, int row, int col, int start, int end, String? url) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (start >= end) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    _splitCellSpanAt(cell, start);
+    _splitCellSpanAt(cell, end);
+
+    var offset = 0;
+    for (final span in cell.spans) {
+      final spanEnd = offset + span.text.length;
+      if (offset >= start && spanEnd <= end) {
+        span.linkUrl = url;
+      }
+      offset = spanEnd;
+    }
+    _notifyChanged();
+  }
+
+  /// Inserts a new hyperlinked text run at [offset] in a table cell.
+  void insertCellLink(int blockIndex, int row, int col, int offset, String text,
+      String? url) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (text.isEmpty) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    final linkSpan = TextFormatSpan(text: text, linkUrl: url);
+    _insertFormattedIntoCellSpans(cell, offset, text, linkSpan);
+    _notifyChanged();
+  }
+
+  /// Atomically applies or replaces a hyperlink for a table cell, appending an unlinked space if needed.
+  /// Returns the target cursor offset (immediately after the inserted space).
+  int setCellLink({
+    required int blockIndex,
+    required int row,
+    required int col,
+    required int start,
+    required int end,
+    required String text,
+    required String url,
+  }) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return 0;
+    if (text.isEmpty) return 0;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return 0;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    final currentCellText = cell.plainText;
+    final safeStart = start.clamp(0, currentCellText.length);
+    final safeEnd = end.clamp(safeStart, currentCellText.length);
+
+    int linkEnd;
+    final selectedText = (safeStart < safeEnd)
+        ? currentCellText.substring(safeStart, safeEnd)
+        : '';
+
+    if (safeStart < safeEnd && text == selectedText) {
+      _splitCellSpanAt(cell, safeStart);
+      _splitCellSpanAt(cell, safeEnd);
+
+      var offset = 0;
+      for (final span in cell.spans) {
+        final spanEnd = offset + span.text.length;
+        if (offset >= safeStart && spanEnd <= safeEnd) {
+          span.linkUrl = url;
+        }
+        offset = spanEnd;
+      }
+      linkEnd = safeEnd;
+    } else {
+      if (safeEnd > safeStart) {
+        _deleteFromCellSpans(cell, safeStart, safeEnd - safeStart);
+      }
+      final linkSpan = TextFormatSpan(text: text, linkUrl: url);
+      _insertFormattedIntoCellSpans(cell, safeStart, text, linkSpan);
+      linkEnd = safeStart + text.length;
+    }
+
+    final textAfterLink = cell.plainText;
+    final hasSpaceAfter =
+        linkEnd < textAfterLink.length && textAfterLink[linkEnd] == ' ';
+
+    if (!hasSpaceAfter) {
+      _insertFormattedIntoCellSpans(
+        cell,
+        linkEnd,
+        ' ',
+        TextFormatSpan.plain(' '),
+      );
+    }
+
+    cell.normalizeSpans();
+    _notifyChanged();
+
+    return linkEnd + 1;
+  }
+
+  /// Deletes [length] characters starting from [start] in a table cell.
+  void deleteCellText(
+      int blockIndex, int row, int col, int start, int length) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    if (length <= 0) return;
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return;
+
+    _saveState();
+    final cell = block.getCell(row, col);
+    _deleteFromCellSpans(cell, start, length);
+    _notifyChanged();
+  }
+
+  /// Returns the link text and url at [offset] in a table cell, if any.
+  Map<String, String?> getCellLinkInfoAt(
+      int blockIndex, int row, int col, int offset) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) {
+      return {'text': null, 'url': null};
+    }
+    final block = document.blocks[blockIndex];
+    if (block is! TableNode) return {'text': null, 'url': null};
+
+    final cell = block.getCell(row, col);
+    if (cell.spans.isEmpty) return {'text': null, 'url': null};
+
+    final loc = cell.getSpanAt(offset);
+    if (loc.spanIndex >= cell.spans.length) return {'text': null, 'url': null};
+
+    final span = cell.spans[loc.spanIndex];
+    if (span.linkUrl != null && span.linkUrl!.isNotEmpty) {
+      return {'text': span.text, 'url': span.linkUrl};
+    }
+    return {'text': null, 'url': null};
+  }
+
   /// Gets the format state at a specific offset within a table cell.
   Map<SmartButtonType, dynamic> getCellFormatAt(
       int blockIndex, int row, int col, int offset) {
@@ -1242,6 +1516,8 @@ class DocumentController extends ChangeNotifier {
       SmartButtonType.alignJustify:
           cellBlock.alignment == SmartTextAlign.justify,
       SmartButtonType.blockType: cellBlock.blockType,
+      SmartButtonType.insertLink:
+          span.linkUrl != null && span.linkUrl!.isNotEmpty,
     };
   }
 
@@ -1325,26 +1601,25 @@ class DocumentController extends ChangeNotifier {
   /// Deletes text from a cell's spans (cell-level equivalent of _deleteFromSpans).
   void _deleteFromCellSpans(TableCellNode cell, int offset, int count) {
     if (count <= 0) return;
-    var remaining = count;
+    final delStart = offset;
+    final delEnd = offset + count;
     var current = 0;
 
-    for (var i = 0; i < cell.spans.length && remaining > 0; i++) {
+    for (var i = 0; i < cell.spans.length; i++) {
       final span = cell.spans[i];
-      final spanEnd = current + span.text.length;
+      final origLen = span.text.length;
+      final spanEnd = current + origLen;
 
-      if (offset < spanEnd && (offset + remaining) > current) {
-        final deleteStart = (offset - current).clamp(0, span.text.length);
-        final deleteEnd =
-            (offset + remaining - current).clamp(0, span.text.length);
-        final deleteLen = deleteEnd - deleteStart;
-
-        span.text = span.text.substring(0, deleteStart) +
-            span.text.substring(deleteEnd);
-        remaining -= deleteLen;
-
-        if (span.text.isEmpty) {
-          cell.spans.removeAt(i);
-          i--;
+      if (spanEnd > delStart && current < delEnd) {
+        final localStart = (delStart - current).clamp(0, origLen);
+        final localEnd = (delEnd - current).clamp(0, origLen);
+        if (localEnd > localStart) {
+          span.text = span.text.substring(0, localStart) +
+              span.text.substring(localEnd);
+          if (span.text.isEmpty) {
+            cell.spans.removeAt(i);
+            i--;
+          }
         }
       }
       current = spanEnd;

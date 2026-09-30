@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import '../../../smart_editor_controller.dart';
 import '../../core/document/document.dart';
 import '../../core/document/document_controller.dart';
 import '../../core/infra/html_serializer.dart';
@@ -10,6 +12,7 @@ import '../../models/enums.dart';
 import '../../models/pending_inline_format.dart';
 import '../blocks/block_widget.dart';
 import '../blocks/table_block_widget.dart';
+import '../toolbar/inputs/link_dialog.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import '../../core/infra/html_parser.dart';
 import 'keyboard_done_overlay.dart';
@@ -23,11 +26,13 @@ class SmartEditorWidget extends StatefulWidget {
   const SmartEditorWidget({
     super.key,
     required this.documentController,
+    this.controller,
     this.editorSettings = const SmartEditorSettings(),
     this.onFormatStateChanged,
   });
 
   final DocumentController documentController;
+  final SmartEditorController? controller;
   final SmartEditorSettings editorSettings;
 
   /// Internal callback to update toolbar state when formatting changes
@@ -61,6 +66,14 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
   /// Last non-collapsed range, retained when the field loses focus (e.g. toolbar tap).
   TextSelection? _toolbarRangeSelection;
   int? _toolbarRangeBlockIndex;
+
+  /// Floating overlay tooltip for hyperlinks.
+  OverlayEntry? _linkTooltipOverlay;
+  int? _tooltipBlockIndex;
+  int? _tooltipCellRow;
+  int? _tooltipCellCol;
+  int? _tooltipSpanStart;
+  int? _tooltipSpanEnd;
 
   DocumentController get _docController => widget.documentController;
   Document get _document => _docController.document;
@@ -104,6 +117,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   @override
   void dispose() {
+    _hideLinkTooltip();
     _docController.removeListener(_onDocChanged);
     for (final node in _focusNodes.values) {
       node.dispose();
@@ -113,6 +127,7 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   void _onDocChanged() {
     if (!mounted) return;
+    _hideLinkTooltip();
     rebuild();
   }
 
@@ -567,8 +582,14 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
 
   void _onSelectionChanged(int blockIndex, int baseOffset, int extentOffset) {
     _focusedBlockIndex = blockIndex;
-    final int minOffset = baseOffset < extentOffset ? baseOffset : extentOffset;
-    final int maxOffset = baseOffset < extentOffset ? extentOffset : baseOffset;
+    final blockId = _document.blocks[blockIndex].id;
+    final hasFocus = _focusNodes[blockId]?.hasFocus ?? false;
+
+    // Normalize raw offsets from BlockWidget (subtract 1 for ZWSP)
+    final normBase = (baseOffset - 1).clamp(0, 1 << 30);
+    final normExtent = (extentOffset - 1).clamp(0, 1 << 30);
+    final int minOffset = normBase < normExtent ? normBase : normExtent;
+    final int maxOffset = normBase < normExtent ? normExtent : normBase;
 
     if (minOffset != maxOffset) {
       _toolbarRangeSelection = TextSelection(
@@ -576,12 +597,14 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
         extentOffset: maxOffset,
       );
       _toolbarRangeBlockIndex = blockIndex;
-    } else {
-      // Whenever the user clicks to a single point (cursor), we MUST clear the remembered selection.
-      // This prevents the toolbar from "remembering" a previous range and re-applying formatting to it.
+    } else if (hasFocus) {
+      // Only clear remembered selection when a collapsed cursor event arrives
+      // while the block still HAS focus. If focus was lost (blur), preserve range!
       _toolbarRangeSelection = null;
       _toolbarRangeBlockIndex = null;
     }
+
+    _checkLinkTooltip(blockIndex, minOffset);
 
     // Clear pending format when cursor moves significantly and we are not just typing
     bool movedManually = !_isTyping &&
@@ -799,7 +822,12 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     }
     if (_toolbarRangeSelection != null &&
         _toolbarRangeBlockIndex == _focusedBlockIndex) {
-      final len = _document.blocks[_focusedBlockIndex].plainText.length;
+      final len = info != null
+          ? ((_document.blocks[_focusedBlockIndex] as TableNode)
+              .getCell(info.row, info.col)
+              .plainText
+              .length)
+          : _document.blocks[_focusedBlockIndex].plainText.length;
       final r = _toolbarRangeSelection!;
       if (r.isValid && r.start >= 0 && r.end <= len && r.start < r.end) {
         return r;
@@ -814,6 +842,337 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     final base = (raw.baseOffset - 1).clamp(0, 1 << 30);
     final extent = (raw.extentOffset - 1).clamp(0, 1 << 30);
     return TextSelection(baseOffset: base, extentOffset: extent);
+  }
+
+  void _checkLinkTooltip(int blockIndex, int offset) {
+    if (blockIndex < 0 || blockIndex >= _document.blocks.length) {
+      _hideLinkTooltip();
+      return;
+    }
+    final block = _document.blocks[blockIndex];
+    if (block.spans.isEmpty) {
+      _hideLinkTooltip();
+      return;
+    }
+
+    final loc = block.getSpanAt(offset);
+    if (loc.spanIndex < block.spans.length) {
+      final span = block.spans[loc.spanIndex];
+      if (span.linkUrl != null && span.linkUrl!.isNotEmpty) {
+        var spanStart = 0;
+        for (var i = 0; i < loc.spanIndex; i++) {
+          spanStart += block.spans[i].text.length;
+        }
+        final spanEnd = spanStart + span.text.length;
+        _showLinkTooltip(
+          blockIndex: blockIndex,
+          spanStart: spanStart,
+          spanEnd: spanEnd,
+          displayText: span.text,
+          url: span.linkUrl!,
+        );
+        return;
+      }
+    }
+    _hideLinkTooltip();
+  }
+
+  void _checkCellLinkTooltip(int blockIndex, int row, int col, int offset) {
+    if (blockIndex < 0 || blockIndex >= _document.blocks.length) {
+      _hideLinkTooltip();
+      return;
+    }
+    final block = _document.blocks[blockIndex];
+    if (block is! TableNode) {
+      _hideLinkTooltip();
+      return;
+    }
+
+    final cell = block.getCell(row, col);
+    if (cell.spans.isEmpty) {
+      _hideLinkTooltip();
+      return;
+    }
+
+    final loc = cell.getSpanAt(offset);
+    if (loc.spanIndex < cell.spans.length) {
+      final span = cell.spans[loc.spanIndex];
+      if (span.linkUrl != null && span.linkUrl!.isNotEmpty) {
+        var spanStart = 0;
+        for (var i = 0; i < loc.spanIndex; i++) {
+          spanStart += cell.spans[i].text.length;
+        }
+        final spanEnd = spanStart + span.text.length;
+        _showLinkTooltip(
+          blockIndex: blockIndex,
+          row: row,
+          col: col,
+          spanStart: spanStart,
+          spanEnd: spanEnd,
+          displayText: span.text,
+          url: span.linkUrl!,
+        );
+        return;
+      }
+    }
+    _hideLinkTooltip();
+  }
+
+  void _showLinkTooltip({
+    required int blockIndex,
+    int? row,
+    int? col,
+    required int spanStart,
+    required int spanEnd,
+    required String displayText,
+    required String url,
+  }) {
+    if (_linkTooltipOverlay != null &&
+        _tooltipBlockIndex == blockIndex &&
+        _tooltipCellRow == row &&
+        _tooltipCellCol == col &&
+        _tooltipSpanStart == spanStart &&
+        _tooltipSpanEnd == spanEnd) {
+      return;
+    }
+
+    _hideLinkTooltip();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final overlayState = Overlay.maybeOf(context, rootOverlay: true);
+      if (overlayState == null) return;
+
+      RenderEditable? renderEditable;
+      RenderBox? fallbackBox;
+
+      if (row != null && col != null) {
+        final tableId = _document.blocks[blockIndex].id;
+        final cellState = _tableBlockKeys[tableId]
+            ?.currentState
+            ?.getCellKey(row, col)
+            ?.currentState;
+        renderEditable = cellState?.renderEditable;
+        fallbackBox = cellState?.context.findRenderObject() as RenderBox?;
+      } else {
+        final blockId = _document.blocks[blockIndex].id;
+        final blockState = _blockKeys[blockId]?.currentState;
+        renderEditable = blockState?.renderEditable;
+        fallbackBox = blockState?.context.findRenderObject() as RenderBox?;
+      }
+
+      Offset targetOffset;
+      if (renderEditable != null && renderEditable.hasSize) {
+        final boxes = renderEditable.getBoxesForSelection(
+          TextSelection(baseOffset: spanStart + 1, extentOffset: spanEnd + 1),
+        );
+        if (boxes.isNotEmpty) {
+          final box = boxes.first;
+          targetOffset = renderEditable.localToGlobal(box.toRect().bottomLeft);
+        } else if (fallbackBox != null && fallbackBox.hasSize) {
+          targetOffset =
+              fallbackBox.localToGlobal(Offset(0, fallbackBox.size.height));
+        } else {
+          return;
+        }
+      } else if (fallbackBox != null && fallbackBox.hasSize) {
+        targetOffset =
+            fallbackBox.localToGlobal(Offset(0, fallbackBox.size.height));
+      } else {
+        return;
+      }
+
+      final screenSize = MediaQuery.of(context).size;
+      final left = (targetOffset.dx)
+          .clamp(16.0, (screenSize.width - 290.0).clamp(16.0, double.infinity));
+      final top = targetOffset.dy + 4.0;
+
+      final isDark = widget.editorSettings.darkMode ??
+          (MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+      _tooltipBlockIndex = blockIndex;
+      _tooltipCellRow = row;
+      _tooltipCellCol = col;
+      _tooltipSpanStart = spanStart;
+      _tooltipSpanEnd = spanEnd;
+
+      _linkTooltipOverlay = OverlayEntry(
+        builder: (ctx) => Positioned(
+          left: left,
+          top: top,
+          child: Material(
+            elevation: 6,
+            borderRadius: BorderRadius.circular(10),
+            color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          displayText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          url,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF1E88E5),
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    tooltip: 'Open link',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      _hideLinkTooltip();
+                      widget.editorSettings.onLinkTapped?.call(url);
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    tooltip: 'Edit link',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      _hideLinkTooltip();
+                      _showLinkDialog(
+                        blockIndex: blockIndex,
+                        row: row,
+                        col: col,
+                        spanStart: spanStart,
+                        spanEnd: spanEnd,
+                        initialText: displayText,
+                        initialUrl: url,
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.link_off, size: 16),
+                    tooltip: 'Remove link',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      _hideLinkTooltip();
+                      if (row != null && col != null) {
+                        _docController.applyCellLink(
+                            blockIndex, row, col, spanStart, spanEnd, null);
+                      } else {
+                        _docController.applyLink(
+                            blockIndex, spanStart, spanEnd, null);
+                      }
+                      widget.onFormatStateChanged?.call(
+                          blockIndex, _getMergedFormats(blockIndex, spanStart));
+                      rebuild();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      overlayState.insert(_linkTooltipOverlay!);
+    });
+  }
+
+  void _hideLinkTooltip() {
+    _linkTooltipOverlay?.remove();
+    _linkTooltipOverlay = null;
+    _tooltipBlockIndex = null;
+    _tooltipCellRow = null;
+    _tooltipCellCol = null;
+    _tooltipSpanStart = null;
+    _tooltipSpanEnd = null;
+  }
+
+  void _showLinkDialog({
+    required int blockIndex,
+    int? row,
+    int? col,
+    required int spanStart,
+    required int spanEnd,
+    required String initialText,
+    required String initialUrl,
+  }) {
+    showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => LinkDialog(
+        initialUrl: initialUrl,
+        initialText: initialText,
+        isDarkMode: widget.editorSettings.darkMode ?? false,
+      ),
+    ).then((result) {
+      if (result != null) {
+        if (result['action'] == 'remove') {
+          if (row != null && col != null) {
+            _docController.applyCellLink(
+                blockIndex, row, col, spanStart, spanEnd, null);
+          } else {
+            _docController.applyLink(blockIndex, spanStart, spanEnd, null);
+          }
+        } else if (result['action'] == 'insert') {
+          final newUrl = result['url'] as String;
+          final newText = result['text'] as String;
+          if (widget.controller != null) {
+            widget.controller!.insertLink(
+              newUrl,
+              newText,
+              blockIndex: blockIndex,
+              selection:
+                  TextSelection(baseOffset: spanStart, extentOffset: spanEnd),
+            );
+          } else {
+            if (row != null && col != null) {
+              _docController.setCellLink(
+                blockIndex: blockIndex,
+                row: row,
+                col: col,
+                start: spanStart,
+                end: spanEnd,
+                text: newText,
+                url: newUrl,
+              );
+            } else {
+              _docController.setLink(
+                blockIndex: blockIndex,
+                start: spanStart,
+                end: spanEnd,
+                text: newText,
+                url: newUrl,
+              );
+            }
+            rebuild();
+          }
+        }
+      }
+    });
   }
 
   /// Requests focus back to the currently focused block
@@ -834,6 +1193,57 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     }
   }
 
+  /// Sets cursor position in the specified block (or table cell if row/col provided)
+  /// using 0-based document offset, focuses the block/cell, clears remembered range selections,
+  /// and updates toolbar/format listeners.
+  void setCursorPosition(int blockIndex, int docOffset, {int? row, int? col}) {
+    if (blockIndex < 0 || blockIndex >= _document.blocks.length) return;
+
+    _toolbarRangeSelection = null;
+    _toolbarRangeBlockIndex = null;
+    _pendingInline = null;
+    _hideLinkTooltip();
+
+    if (row != null && col != null) {
+      _focusedBlockIndex = blockIndex;
+      _focusedCellRow = row;
+      _focusedCellCol = col;
+      final block = _document.blocks[blockIndex];
+      if (block is TableNode) {
+        final tableId = block.id;
+        final tableState = _tableBlockKeys[tableId]?.currentState;
+        tableState?.requestFocusOnCell(row, col);
+        final cellKey = tableState?.getCellKey(row, col);
+        cellKey?.currentState?.setCursorPosition(docOffset + 1);
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          cellKey?.currentState?.setCursorPosition(docOffset + 1);
+          final formats =
+              _docController.getCellFormatAt(blockIndex, row, col, docOffset);
+          formats[SmartButtonType.insertLink] = false;
+          widget.editorSettings.onChangeSelection?.call(formats);
+          widget.onFormatStateChanged?.call(blockIndex, formats);
+        });
+      }
+    } else {
+      _focusedBlockIndex = blockIndex;
+      final id = _document.blocks[blockIndex].id;
+      _focusNodes[id]?.requestFocus();
+      final blockState = _blockKeys[id]?.currentState;
+      blockState?.setCursorPosition(docOffset + 1);
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        blockState?.setCursorPosition(docOffset + 1);
+        final formats = _getMergedFormats(blockIndex, docOffset);
+        formats[SmartButtonType.insertLink] = false;
+        widget.editorSettings.onChangeSelection?.call(formats);
+        widget.onFormatStateChanged?.call(blockIndex, formats);
+      });
+    }
+
+    _docController.refresh();
+  }
+
   /// Forces a rebuild of all blocks
   void rebuild() {
     _safeSetState(() {
@@ -845,20 +1255,43 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final blockIndex = _focusedBlockIndex;
       if (blockIndex < _document.blocks.length) {
-        final sel = _blockKeys[_document.blocks[blockIndex].id]
-            ?.currentState
-            ?.selection;
-        int offset = sel?.baseOffset ?? 0;
+        final info = focusedTableInfo;
+        Map<SmartButtonType, dynamic> formats;
+        if (info != null) {
+          final tableId = _document.blocks[info.blockIndex].id;
+          final raw = _tableBlockKeys[tableId]?.currentState?.selection;
+          final sel =
+              raw != null && raw.isValid ? _normalizeTextSelection(raw) : null;
+          int offset = sel?.baseOffset ?? 0;
+          if (sel != null && !sel.isCollapsed) {
+            final cellLen = (_document.blocks[info.blockIndex] as TableNode)
+                .getCell(info.row, info.col)
+                .plainText
+                .length;
+            if (sel.start < cellLen) {
+              offset = sel.start + 1;
+            }
+          }
+          formats = _docController.getCellFormatAt(
+              info.blockIndex, info.row, info.col, offset);
+        } else {
+          final raw = _blockKeys[_document.blocks[blockIndex].id]
+              ?.currentState
+              ?.selection;
+          final sel =
+              raw != null && raw.isValid ? _normalizeTextSelection(raw) : null;
+          int offset = sel?.baseOffset ?? 0;
 
-        if (sel != null &&
-            !sel.isCollapsed &&
-            sel.start < _document.blocks[blockIndex].textLength) {
-          offset = sel.start + 1;
+          if (sel != null &&
+              !sel.isCollapsed &&
+              sel.start < _document.blocks[blockIndex].textLength) {
+            offset = sel.start + 1;
+          }
+
+          formats = _getMergedFormats(blockIndex, offset);
         }
-
-        final formats = _getMergedFormats(blockIndex, offset);
         widget.onFormatStateChanged?.call(blockIndex, formats);
-      }
+      } 
     });
   }
 
@@ -926,52 +1359,63 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     final adaptedPadding =
         widget.editorSettings.editorPadding.copyWith(bottom: bottomPadding);
 
-    return Container(
-      decoration: widget.editorSettings.editorDecoration ??
-          BoxDecoration(color: bgColor),
-      child: ReorderableListView.builder(
-        padding: adaptedPadding,
-        physics: widget.editorSettings.scrollPhysics,
-        buildDefaultDragHandles: false,
-        itemCount: units.length,
-        onReorder: _onReorder,
-        itemBuilder: (context, unitIndex) {
-          final unit = units[unitIndex];
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollUpdateNotification ||
+            notification is ScrollStartNotification) {
+          _hideLinkTooltip();
+        }
+        return false;
+      },
+      child: Container(
+        decoration: widget.editorSettings.editorDecoration ??
+            BoxDecoration(color: bgColor),
+        child: ReorderableListView.builder(
+          padding: adaptedPadding,
+          physics: widget.editorSettings.scrollPhysics,
+          buildDefaultDragHandles: false,
+          itemCount: units.length,
+          // ignore: deprecated_member_use
+          onReorder: _onReorder,
+          itemBuilder: (context, unitIndex) {
+            final unit = units[unitIndex];
 
-          // If it's a single non-list block, render it directly
-          if (unit.blocks.length == 1 && unit.blocks[0] is! ListItemNode) {
-            return _buildBlock(
-              unit.blocks[0],
-              unit.startIndex,
-              cursorColor,
-              isDark,
-              ValueKey(unit.id),
-              dragIndex: unitIndex,
-            );
-          }
-
-          // If it's a list (one or more items), bundle them in a Column
-          // with a single drag handle for the group.
-          return Column(
-            key: ValueKey(unit.id),
-            mainAxisSize: MainAxisSize.min,
-            children: unit.blocks.asMap().entries.map((entry) {
-              final internalIndex = entry.key;
-              final block = entry.value;
-              final flatIndex = unit.startIndex + internalIndex;
-
+            // If it's a single non-list block, render it directly
+            if (unit.blocks.length == 1 && unit.blocks[0] is! ListItemNode) {
+              final block = unit.blocks[0];
               return _buildBlock(
                 block,
-                flatIndex,
+                unit.startIndex,
                 cursorColor,
                 isDark,
-                ValueKey('${block.id}_inner'),
-                showDragHandle: internalIndex == 0,
+                _blockKeys[block.id] ?? ValueKey(unit.id),
                 dragIndex: unitIndex,
               );
-            }).toList(),
-          );
-        },
+            }
+
+            // If it's a list (one or more items), bundle them in a Column
+            // with a single drag handle for the group.
+            return Column(
+              key: ValueKey(unit.id),
+              mainAxisSize: MainAxisSize.min,
+              children: unit.blocks.asMap().entries.map((entry) {
+                final internalIndex = entry.key;
+                final block = entry.value;
+                final flatIndex = unit.startIndex + internalIndex;
+
+                return _buildBlock(
+                  block,
+                  flatIndex,
+                  cursorColor,
+                  isDark,
+                  _blockKeys[block.id] ?? ValueKey('${block.id}_inner'),
+                  showDragHandle: internalIndex == 0,
+                  dragIndex: unitIndex,
+                );
+              }).toList(),
+            );
+          },
+        ),
       ),
     );
   }
@@ -1087,18 +1531,26 @@ class SmartEditorWidgetState extends State<SmartEditorWidget> {
     _focusedCellRow = row;
     _focusedCellCol = col;
 
+    final tableId = _document.blocks[blockIndex].id;
+    final isCellFocused =
+        _tableBlockKeys[tableId]?.currentState?.isCellFocused(row, col) ??
+            false;
+
     final int normBase = (base - 1).clamp(0, 1 << 30);
     final int normExtent = (extent - 1).clamp(0, 1 << 30);
     final int minOffset = normBase < normExtent ? normBase : normExtent;
+    final int maxOffset = normBase < normExtent ? normExtent : normBase;
 
     if (normBase != normExtent) {
       _toolbarRangeSelection =
-          TextSelection(baseOffset: normBase, extentOffset: normExtent);
+          TextSelection(baseOffset: minOffset, extentOffset: maxOffset);
       _toolbarRangeBlockIndex = blockIndex;
-    } else {
+    } else if (isCellFocused) {
       _toolbarRangeSelection = null;
       _toolbarRangeBlockIndex = null;
     }
+
+    _checkCellLinkTooltip(blockIndex, row, col, minOffset);
 
     int probeOffset = minOffset;
 

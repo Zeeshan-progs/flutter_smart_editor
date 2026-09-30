@@ -95,6 +95,28 @@ class TableBlockWidgetState extends State<TableBlockWidget> {
     _cellFocusNodes[row][col].requestFocus();
   }
 
+  /// Checks if a specific cell currently has input focus.
+  bool isCellFocused(int row, int col) {
+    if (row >= 0 &&
+        row < _cellFocusNodes.length &&
+        col >= 0 &&
+        col < _cellFocusNodes[row].length) {
+      return _cellFocusNodes[row][col].hasFocus;
+    }
+    return false;
+  }
+
+  /// Returns the GlobalKey for a specific cell's BlockWidgetState.
+  GlobalKey<BlockWidgetState>? getCellKey(int row, int col) {
+    if (row >= 0 &&
+        row < _cellKeys.length &&
+        col >= 0 &&
+        col < _cellKeys[row].length) {
+      return _cellKeys[row][col];
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();

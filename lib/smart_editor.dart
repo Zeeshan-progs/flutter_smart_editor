@@ -179,6 +179,7 @@ class _SmartEditorState extends State<SmartEditor> {
       child: SmartEditorWidget(
         key: _editorKey,
         documentController: widget.controller.documentController,
+        controller: widget.controller,
         editorSettings: widget.editorSettings,
         onFormatStateChanged: _onFormatStateChanged,
       ),

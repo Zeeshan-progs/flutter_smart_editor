@@ -14,6 +14,8 @@ import 'groups/list_button_group.dart';
 import 'groups/history_button_group.dart';
 import 'groups/color_button_group.dart';
 import 'groups/table_button_group.dart';
+import 'groups/insert_button_group.dart';
+import 'inputs/link_dialog.dart';
 
 /// A premium Material 3 toolbar for the flutter smart editor.
 class SmartToolbar extends StatefulWidget {
@@ -232,8 +234,8 @@ class SmartToolbarState extends State<SmartToolbar> {
     if (type == SmartButtonType.ul || type == SmartButtonType.bulletList) {
       final tableInfo = widget.controller.focusedTableInfo;
       if (tableInfo != null) {
-        widget.documentController.toggleCellList(
-            tableInfo.blockIndex, tableInfo.row, tableInfo.col, SmartListType.bullet);
+        widget.documentController.toggleCellList(tableInfo.blockIndex,
+            tableInfo.row, tableInfo.col, SmartListType.bullet);
       } else {
         widget.documentController.toggleList(blockIndex, SmartListType.bullet);
       }
@@ -245,8 +247,8 @@ class SmartToolbarState extends State<SmartToolbar> {
     if (type == SmartButtonType.ol || type == SmartButtonType.orderedList) {
       final tableInfo = widget.controller.focusedTableInfo;
       if (tableInfo != null) {
-        widget.documentController.toggleCellList(
-            tableInfo.blockIndex, tableInfo.row, tableInfo.col, SmartListType.ordered);
+        widget.documentController.toggleCellList(tableInfo.blockIndex,
+            tableInfo.row, tableInfo.col, SmartListType.ordered);
       } else {
         widget.documentController.toggleList(blockIndex, SmartListType.ordered);
       }
@@ -279,8 +281,8 @@ class SmartToolbarState extends State<SmartToolbar> {
     if (type == SmartButtonType.insertRow) {
       final tableInfo = widget.controller.focusedTableInfo;
       if (tableInfo != null) {
-        widget.documentController.insertTableRow(
-            tableInfo.blockIndex, tableInfo.row + 1);
+        widget.documentController
+            .insertTableRow(tableInfo.blockIndex, tableInfo.row + 1);
         widget.onFormatApplied?.call();
         _syncToolbarAfterDocumentChange();
       }
@@ -290,8 +292,8 @@ class SmartToolbarState extends State<SmartToolbar> {
     if (type == SmartButtonType.insertColumn) {
       final tableInfo = widget.controller.focusedTableInfo;
       if (tableInfo != null) {
-        widget.documentController.insertTableColumn(
-            tableInfo.blockIndex, tableInfo.col + 1);
+        widget.documentController
+            .insertTableColumn(tableInfo.blockIndex, tableInfo.col + 1);
         widget.onFormatApplied?.call();
         _syncToolbarAfterDocumentChange();
       }
@@ -301,8 +303,8 @@ class SmartToolbarState extends State<SmartToolbar> {
     if (type == SmartButtonType.deleteRow) {
       final tableInfo = widget.controller.focusedTableInfo;
       if (tableInfo != null) {
-        widget.documentController.removeTableRow(
-            tableInfo.blockIndex, tableInfo.row);
+        widget.documentController
+            .removeTableRow(tableInfo.blockIndex, tableInfo.row);
         widget.onFormatApplied?.call();
         _syncToolbarAfterDocumentChange();
       }
@@ -312,8 +314,8 @@ class SmartToolbarState extends State<SmartToolbar> {
     if (type == SmartButtonType.deleteColumn) {
       final tableInfo = widget.controller.focusedTableInfo;
       if (tableInfo != null) {
-        widget.documentController.removeTableColumn(
-            tableInfo.blockIndex, tableInfo.col);
+        widget.documentController
+            .removeTableColumn(tableInfo.blockIndex, tableInfo.col);
         widget.onFormatApplied?.call();
         _syncToolbarAfterDocumentChange();
       }
@@ -356,6 +358,11 @@ class SmartToolbarState extends State<SmartToolbar> {
       widget.controller.pasteContent();
       _syncToolbarAfterDocumentChange();
       _finishToolbarAction();
+      return;
+    }
+
+    if (type == SmartButtonType.insertLink) {
+      _showLinkDialog();
       return;
     }
 
@@ -414,13 +421,11 @@ class SmartToolbarState extends State<SmartToolbar> {
     final tableInfo = widget.controller.focusedTableInfo;
     if (tableInfo != null) {
       if (_isBoolToggleType(type) && value == null) {
-        widget.documentController.toggleCellFormat(
-            tableInfo.blockIndex, tableInfo.row, tableInfo.col,
-            start, end, type);
+        widget.documentController.toggleCellFormat(tableInfo.blockIndex,
+            tableInfo.row, tableInfo.col, start, end, type);
       } else {
-        widget.documentController.applyCellFormat(
-            tableInfo.blockIndex, tableInfo.row, tableInfo.col,
-            start, end, type, value);
+        widget.documentController.applyCellFormat(tableInfo.blockIndex,
+            tableInfo.row, tableInfo.col, start, end, type, value);
       }
     } else {
       if (_isBoolToggleType(type) && value == null) {
@@ -462,6 +467,48 @@ class SmartToolbarState extends State<SmartToolbar> {
       }
     }
     return (blockIndex, selection);
+  }
+
+  void _showLinkDialog() {
+    final (blockIndex, selection) = _getEffectiveSelection();
+    final linkInfo = widget.controller.getLinkInfo(
+      blockIndex: blockIndex,
+      selection: selection,
+    );
+    final initialUrl = linkInfo['url'];
+    final initialText = linkInfo['text'];
+
+    showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => LinkDialog(
+        initialUrl:
+            (initialUrl != null && initialUrl.isNotEmpty) ? initialUrl : null,
+        initialText: initialText,
+        isDarkMode: widget.isDarkMode,
+      ),
+    ).then((result) {
+      if (result != null) {
+        _clearPointerSnapshot();
+        _cachedSelection = null;
+        if (result['action'] == 'remove') {
+          widget.controller.removeLink(
+            blockIndex: blockIndex,
+            selection: selection,
+          );
+        } else if (result['action'] == 'insert') {
+          widget.controller.insertLink(
+            result['url'],
+            result['text'],
+            blockIndex: blockIndex,
+            selection: selection,
+          );
+        }
+        _activeFormats[SmartButtonType.insertLink] = false;
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+    });
   }
 
   // List state helpers
@@ -695,7 +742,8 @@ class SmartToolbarState extends State<SmartToolbar> {
         ));
       } else if (group is SmartInsertButtons) {
         final isInTable = widget.controller.isInsideTable;
-        items.add(TableButtonGroup(
+        final isLinkActive = _activeFormats[SmartButtonType.insertLink] == true;
+        items.add(InsertButtonGroup(
           group: group,
           onAction: _onToolbarAction,
           onSurface: onSurface,
@@ -704,6 +752,7 @@ class SmartToolbarState extends State<SmartToolbar> {
           disabledColor: disabledColor,
           enabled: _enabled,
           isInsideTable: isInTable,
+          isLinkActive: isLinkActive,
           itemHeight: widget.settings.itemHeight,
           buttonIconSize: widget.settings.buttonIconSize,
           isDarkMode: widget.isDarkMode,
@@ -728,5 +777,4 @@ class SmartToolbarState extends State<SmartToolbar> {
           ),
         );
   }
-
 }
