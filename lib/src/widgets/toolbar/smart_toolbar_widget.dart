@@ -196,6 +196,7 @@ class SmartToolbarState extends State<SmartToolbar> {
   /// Unified handler for all toolbar actions.
   void _onToolbarAction(SmartButtonType type, {dynamic value}) {
     if (!_enabled) return;
+    widget.controller.hideLinkTooltip();
 
     final (blockIndex, selection) = _getEffectiveSelection();
 

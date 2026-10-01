@@ -10,6 +10,7 @@ mixin TextEditorMixin on BaseEditorState {
   @protected
   void onTextChanged(int blockIndex, String newText) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    hideLinkTooltip();
 
     isTyping = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -52,6 +53,7 @@ mixin TextEditorMixin on BaseEditorState {
   @override
   @protected
   void onPaste(int blockIndex) async {
+    hideLinkTooltip();
     try {
       final reader = await SystemClipboard.instance?.read();
       if (reader != null && reader.canProvide(Formats.htmlText)) {

@@ -75,7 +75,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify initial content
-    expect(controller.document.blocks.first.plainText, 'Learning Flutter today');
+    expect(
+        controller.document.blocks.first.plainText, 'Learning Flutter today');
 
     // Select "Flutter" (offsets 9 to 16 in document)
     // In EditableText controller, offsets include ZWSP so raw is 10 to 17
@@ -340,5 +341,207 @@ void main() {
 
     expect(controller.document.blocks.first.plainText, 'Original');
   });
-}
 
+  testWidgets(
+      'Link tooltip appears on cursor placement and dismisses on tap outside',
+      (WidgetTester tester) async {
+    final controller = SmartEditorController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              const SizedBox(height: 50, child: Text('Header')),
+              Expanded(
+                child: SmartEditor(
+                  controller: controller,
+                  editorSettings: const SmartEditorSettings(
+                    initialText:
+                        '<p>Visit <a href="https://flutter.dev">Flutter</a> website</p>',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Initially no tooltip
+    expect(find.byTooltip('Open link'), findsNothing);
+
+    // Place cursor on "Flutter" (offset 6)
+    controller.setCursorPosition(0, 6);
+    await tester.pumpAndSettle();
+
+    // Verify tooltip is visible
+    expect(find.byTooltip('Open link'), findsOneWidget);
+    expect(find.text('https://flutter.dev'), findsOneWidget);
+
+    // Tap outside (e.g. Header at top)
+    await tester.tap(find.text('Header'));
+    await tester.pumpAndSettle();
+
+    // Verify tooltip is dismissed
+    expect(find.byTooltip('Open link'), findsNothing);
+  });
+
+  testWidgets('Link tooltip dismisses when typing in editor',
+      (WidgetTester tester) async {
+    final controller = SmartEditorController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SmartEditor(
+            controller: controller,
+            editorSettings: const SmartEditorSettings(
+              initialText: '<p><a href="https://flutter.dev">Flutter</a></p>',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Place cursor on link (offset 2)
+    controller.setCursorPosition(0, 2);
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Open link'), findsOneWidget);
+
+    // Type text into editor
+    final editableFinder = find.byType(EditableText);
+    await tester.enterText(editableFinder.first, '\u200BFluttering');
+    await tester.pumpAndSettle();
+
+    // Tooltip should be dismissed
+    expect(find.byTooltip('Open link'), findsNothing);
+  });
+
+  testWidgets('Link tooltip dismisses when toolbar button is tapped',
+      (WidgetTester tester) async {
+    final controller = SmartEditorController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SmartEditor(
+            controller: controller,
+            editorSettings: const SmartEditorSettings(
+              initialText:
+                  '<p><a href="https://flutter.dev">Flutter</a> is great</p>',
+            ),
+            toolbarSettings: const SmartToolbarSettings(
+              defaultButtons: [
+                SmartFontButtons(bold: true),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Place cursor on link (offset 2)
+    controller.setCursorPosition(0, 2);
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Open link'), findsOneWidget);
+
+    // Tap Bold button on toolbar
+    await tester.tap(find.byTooltip('Bold'));
+    await tester.pumpAndSettle();
+
+    // Tooltip should be dismissed
+    expect(find.byTooltip('Open link'), findsNothing);
+  });
+
+  testWidgets('Link tooltip appears when selecting linked text in editor',
+      (WidgetTester tester) async {
+    final controller = SmartEditorController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SmartEditor(
+            controller: controller,
+            editorSettings: const SmartEditorSettings(
+              initialText:
+                  '<p>Visit <a href="https://flutter.dev">Flutter</a> website</p>',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Initially no tooltip
+    expect(find.byTooltip('Open link'), findsNothing);
+
+    // Select "Flutter" (offsets 6 to 13)
+    controller.setSelection(0, 6, 13);
+    await tester.pumpAndSettle();
+
+    // Tooltip should appear for the selected link text
+    expect(find.byTooltip('Open link'), findsOneWidget);
+    expect(find.text('https://flutter.dev'), findsOneWidget);
+
+    // Now select non-linked text "website" (offsets 14 to 21)
+    controller.setSelection(0, 14, 21);
+    await tester.pumpAndSettle();
+
+    // Tooltip should be dismissed for non-linked selection
+    expect(find.byTooltip('Open link'), findsNothing);
+  });
+
+  testWidgets(
+      'Link tooltip stays visible inside ancestor SingleChildScrollView and dismisses on scroll',
+      (WidgetTester tester) async {
+    final controller = SmartEditorController();
+    addTearDown(controller.dispose);
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            controller: scrollController,
+            child: SizedBox(
+              height: 1200,
+              child: SmartEditor(
+                controller: controller,
+                editorSettings: const SmartEditorSettings(
+                  initialText:
+                      '<p>Visit <a href="https://flutter.dev">Flutter</a> website</p>',
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Select linked text "Flutter"
+    controller.setSelection(0, 6, 13);
+    await tester.pumpAndSettle();
+
+    // Tooltip should be visible inside SingleChildScrollView
+    expect(find.byTooltip('Open link'), findsOneWidget);
+
+    // Scroll the SingleChildScrollView
+    scrollController.jumpTo(50);
+    await tester.pumpAndSettle();
+
+    // Tooltip should be dismissed upon scrolling
+    expect(find.byTooltip('Open link'), findsNothing);
+  });
+}

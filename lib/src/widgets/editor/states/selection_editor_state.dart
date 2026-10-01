@@ -26,11 +26,14 @@ mixin SelectionEditorMixin on BaseEditorState {
               ?.currentState
               ?.cursorOffset ??
           0;
-      final formats = getMergedFormats(blockIndex, cursorOffsetVal);
+      final docOffset = (cursorOffsetVal - 1).clamp(0, 1 << 30);
+      final formats = getMergedFormats(blockIndex, docOffset);
       widget.editorSettings.onChangeSelection?.call(formats);
       widget.onFormatStateChanged?.call(blockIndex, formats);
+      checkLinkTooltip(blockIndex, docOffset);
     } else {
       widget.editorSettings.onBlur?.call();
+      hideLinkTooltip();
 
       // Delay hiding slightly to prevent flickering when moving between blocks
       Future.delayed(const Duration(milliseconds: 50), () {
@@ -60,14 +63,16 @@ mixin SelectionEditorMixin on BaseEditorState {
         extentOffset: maxOffset,
       );
       toolbarRangeBlockIndex = blockIndex;
+      checkLinkTooltip(blockIndex, minOffset, maxOffset);
     } else if (hasFocus) {
       // Only clear remembered selection when a collapsed cursor event arrives
       // while the block still HAS focus. If focus was lost (blur), preserve range!
       toolbarRangeSelection = null;
       toolbarRangeBlockIndex = null;
+      checkLinkTooltip(blockIndex, minOffset);
+    } else {
+      hideLinkTooltip();
     }
-
-    checkLinkTooltip(blockIndex, minOffset);
 
     // Clear pending format when cursor moves significantly and we are not just typing
     bool movedManually = !isTyping &&
@@ -203,6 +208,40 @@ mixin SelectionEditorMixin on BaseEditorState {
       formats[SmartButtonType.insertLink] = false;
       widget.editorSettings.onChangeSelection?.call(formats);
       widget.onFormatStateChanged?.call(blockIndex, formats);
+      checkLinkTooltip(blockIndex, docOffset);
+    });
+
+    docController.refresh();
+  }
+
+  /// Sets text selection in the specified block using 0-based document offsets.
+  @override
+  void setSelection(int blockIndex, int startOffset, int endOffset,
+      {int? row, int? col}) {
+    if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+
+    final normStart = startOffset.clamp(0, 1 << 30);
+    final normEnd = endOffset.clamp(0, 1 << 30);
+    final minOffset = normStart < normEnd ? normStart : normEnd;
+    final maxOffset = normStart < normEnd ? normEnd : normStart;
+
+    toolbarRangeSelection =
+        TextSelection(baseOffset: minOffset, extentOffset: maxOffset);
+    toolbarRangeBlockIndex = blockIndex;
+    pendingInline = null;
+
+    focusedBlockIndex = blockIndex;
+    final id = document.blocks[blockIndex].id;
+    focusNodes[id]?.requestFocus();
+    final blockState = blockKeys[id]?.currentState;
+    blockState?.setSelection(normStart + 1, normEnd + 1);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      blockState?.setSelection(normStart + 1, normEnd + 1);
+      final formats = getMergedFormats(blockIndex, minOffset);
+      widget.editorSettings.onChangeSelection?.call(formats);
+      widget.onFormatStateChanged?.call(blockIndex, formats);
+      checkLinkTooltip(blockIndex, minOffset, maxOffset);
     });
 
     docController.refresh();

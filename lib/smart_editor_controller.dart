@@ -552,6 +552,11 @@ class SmartEditorController extends ChangeNotifier {
     _editorWidgetState?.requestEditorFocus();
   }
 
+  /// Closes any active link preview tooltip overlay.
+  void hideLinkTooltip() {
+    _editorWidgetState?.hideLinkTooltip();
+  }
+
   /// Sets the active search query and searches the document.
   void setSearchQuery(String query) {
     searchStateNotifier.value = searchState.copyWith(
@@ -695,6 +700,19 @@ class SmartEditorController extends ChangeNotifier {
 
   /// Current cursor offset in the focused block (0-based document offset).
   int? get cursorOffset => _editorWidgetState?.cursorOffset;
+
+  /// Sets cursor position in the specified block using 0-based document offset.
+  void setCursorPosition(int blockIndex, int docOffset, {int? row, int? col}) {
+    _editorWidgetState?.setCursorPosition(blockIndex, docOffset,
+        row: row, col: col);
+  }
+
+  /// Sets text selection in the specified block using 0-based document offsets.
+  void setSelection(int blockIndex, int startOffset, int endOffset,
+      {int? row, int? col}) {
+    _editorWidgetState?.setSelection(blockIndex, startOffset, endOffset,
+        row: row, col: col);
+  }
 
   /// Current selection in the focused block.
   TextSelection? get selection => _editorWidgetState?.selection;

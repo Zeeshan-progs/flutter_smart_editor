@@ -86,6 +86,7 @@ mixin TableEditorMixin on BaseEditorState {
           formats[SmartButtonType.insertLink] = false;
           widget.editorSettings.onChangeSelection?.call(formats);
           widget.onFormatStateChanged?.call(blockIndex, formats);
+          checkCellLinkTooltip(blockIndex, row, col, docOffset);
         });
       }
       docController.refresh();
@@ -93,6 +94,49 @@ mixin TableEditorMixin on BaseEditorState {
     }
 
     super.setCursorPosition(blockIndex, docOffset);
+  }
+
+  @override
+  void setSelection(int blockIndex, int startOffset, int endOffset,
+      {int? row, int? col}) {
+    if (row != null && col != null) {
+      if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+      final block = document.blocks[blockIndex];
+      if (block is TableNode) {
+        final normStart = startOffset.clamp(0, 1 << 30);
+        final normEnd = endOffset.clamp(0, 1 << 30);
+        final minOffset = normStart < normEnd ? normStart : normEnd;
+        final maxOffset = normStart < normEnd ? normEnd : normStart;
+
+        toolbarRangeSelection =
+            TextSelection(baseOffset: minOffset, extentOffset: maxOffset);
+        toolbarRangeBlockIndex = blockIndex;
+        pendingInline = null;
+
+        focusedBlockIndex = blockIndex;
+        focusedCellRow = row;
+        focusedCellCol = col;
+
+        final tableId = block.id;
+        final tableState = tableBlockKeys[tableId]?.currentState;
+        tableState?.requestFocusOnCell(row, col);
+        final cellKey = tableState?.getCellKey(row, col);
+        cellKey?.currentState?.setSelection(normStart + 1, normEnd + 1);
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          cellKey?.currentState?.setSelection(normStart + 1, normEnd + 1);
+          final formats =
+              docController.getCellFormatAt(blockIndex, row, col, minOffset);
+          widget.editorSettings.onChangeSelection?.call(formats);
+          widget.onFormatStateChanged?.call(blockIndex, formats);
+          checkCellLinkTooltip(blockIndex, row, col, minOffset, maxOffset);
+        });
+        docController.refresh();
+        return;
+      }
+    }
+
+    super.setSelection(blockIndex, startOffset, endOffset);
   }
 
   @override
@@ -248,8 +292,10 @@ mixin TableEditorMixin on BaseEditorState {
       final formats = docController.getCellFormatAt(blockIndex, row, col, 0);
       widget.editorSettings.onChangeSelection?.call(formats);
       widget.onFormatStateChanged?.call(blockIndex, formats);
+      checkCellLinkTooltip(blockIndex, row, col, 0);
     } else {
       widget.editorSettings.onBlur?.call();
+      hideLinkTooltip();
       Future.delayed(const Duration(milliseconds: 50), () {
         if (!mounted) return;
         final anyFocused = focusNodes.values.any((node) => node.hasFocus);
@@ -280,12 +326,14 @@ mixin TableEditorMixin on BaseEditorState {
       toolbarRangeSelection =
           TextSelection(baseOffset: minOffset, extentOffset: maxOffset);
       toolbarRangeBlockIndex = blockIndex;
+      checkCellLinkTooltip(blockIndex, row, col, minOffset, maxOffset);
     } else if (isCellFocused) {
       toolbarRangeSelection = null;
       toolbarRangeBlockIndex = null;
+      checkCellLinkTooltip(blockIndex, row, col, minOffset);
+    } else {
+      hideLinkTooltip();
     }
-
-    checkCellLinkTooltip(blockIndex, row, col, minOffset);
 
     int probeOffset = minOffset;
 
@@ -301,6 +349,7 @@ mixin TableEditorMixin on BaseEditorState {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     final block = document.blocks[blockIndex];
     if (block is! TableNode) return;
+    hideLinkTooltip();
 
     isTyping = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -332,6 +381,7 @@ mixin TableEditorMixin on BaseEditorState {
 
   @protected
   void onCellPaste(int blockIndex, int row, int col) {
+    hideLinkTooltip();
     // Delegate to the same paste flow as block paste
     onPaste(blockIndex);
   }
