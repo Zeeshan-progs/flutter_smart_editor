@@ -26,6 +26,7 @@ class SmartEditorSettings {
     this.autoAdjustHeight = true,
     this.ensureVisible = false,
     this.scrollPhysics,
+    this.scrollController,
 
     // Keyboard
     this.inputType = SmartInputType.text,
@@ -62,6 +63,7 @@ class SmartEditorSettings {
     this.onKeyDown,
     this.onPaste,
     this.onTagSerialize,
+    this.onLinkTapped,
 
     // Lists & HR
     this.maxListDepth = 3,
@@ -71,6 +73,11 @@ class SmartEditorSettings {
 
     // Tables
     this.tableStyle = const SmartTableStyle(),
+
+    // Find & Replace
+    this.enableFindReplace = true,
+    this.searchMatchColor,
+    this.searchActiveMatchColor,
   });
 
   // ─── Core & HTML ──────────────────────────────────────────────
@@ -121,6 +128,9 @@ class SmartEditorSettings {
 
   /// Custom scroll physics for the editor's scroll view
   final ScrollPhysics? scrollPhysics;
+
+  /// Optional external scroll controller for the editor's scroll view
+  final ScrollController? scrollController;
 
   // ─── Keyboard ───────────────────────────────────────────────
 
@@ -220,6 +230,9 @@ class SmartEditorSettings {
           Map<String, String> styles,
           String content)?
       onTagSerialize;
+  
+  /// Called when a hyperlink is tapped in the editor.
+  final void Function(String url)? onLinkTapped;
 
   // ─── Lists & HR ───────────────────────────────────────────────
 
@@ -243,6 +256,19 @@ class SmartEditorSettings {
 
   /// Styling configuration for table blocks.
   final SmartTableStyle tableStyle;
+
+  // ─── Find & Replace ──────────────────────────────────────────
+
+  /// Whether the Find & Replace feature (and keyboard shortcuts) is enabled.
+  final bool enableFindReplace;
+
+  /// Custom background highlight color for inactive search matches.
+  /// If null, a theme-appropriate color is automatically used.
+  final Color? searchMatchColor;
+
+  /// Custom background highlight color for the active search match.
+  /// If null, a theme-appropriate color is automatically used.
+  final Color? searchActiveMatchColor;
 }
 
 /// Styling configuration for the `<hr>` horizontal rule block.

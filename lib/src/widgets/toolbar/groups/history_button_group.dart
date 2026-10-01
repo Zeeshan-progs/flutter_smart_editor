@@ -102,6 +102,23 @@ class HistoryButtonGroup extends StatelessWidget {
       ));
     }
 
+    if (group.findReplace) {
+      final isFindActive = editorController.searchState.isBarVisible;
+      buttons.add(ToolbarButton(
+        icon: Icons.search_rounded,
+        isActive: isFindActive,
+        onPressed: () => onAction(SmartButtonType.findReplace),
+        activeColor: activeColor,
+        activeBg: activeBg,
+        onSurface: onSurface,
+        disabledColor: disabledColor,
+        enabled: enabled,
+        size: itemHeight,
+        iconSize: buttonIconSize,
+        tooltip: 'Find & Replace',
+      ));
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: buttons,

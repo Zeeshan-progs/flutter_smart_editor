@@ -6,11 +6,13 @@ class SmartOtherButtons extends SmartToolbarGroup {
   final bool redo;
   final bool copy;
   final bool paste;
+  final bool findReplace;
 
   const SmartOtherButtons({
     this.undo = true,
     this.redo = true,
-    this.copy = true,
-    this.paste = true,
+    this.copy = false,
+    this.paste = false,
+    this.findReplace = false,
   });
 }

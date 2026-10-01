@@ -59,6 +59,8 @@ class StylePickerButton extends StatelessWidget {
         return 'Divider';
       case BlockType.table:
         return 'Table';
+      case BlockType.image:
+        return 'Image';
     }
   }
 

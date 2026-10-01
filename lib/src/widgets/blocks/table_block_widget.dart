@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/document/document.dart';
 import '../../core/document/document_controller.dart';
 import '../../models/editor_settings.dart';
+import '../../models/search/search_match.dart';
 import 'block_widget.dart';
 
 /// Renders a [TableNode] as an editable grid of [BlockWidget]s.
@@ -27,6 +28,8 @@ class TableBlockWidget extends StatefulWidget {
     this.readOnly = false,
     this.showDragHandle = true,
     this.dragIndex,
+    this.searchMatches = const [],
+    this.activeSearchMatch,
   });
 
   final TableNode table;
@@ -44,6 +47,12 @@ class TableBlockWidget extends StatefulWidget {
   final bool readOnly;
   final bool showDragHandle;
   final int? dragIndex;
+
+  /// Search matches within this table.
+  final List<SearchMatch> searchMatches;
+
+  /// Active search match, if located in this table.
+  final SearchMatch? activeSearchMatch;
 
   @override
   State<TableBlockWidget> createState() => TableBlockWidgetState();
@@ -93,6 +102,31 @@ class TableBlockWidgetState extends State<TableBlockWidget> {
       return;
     }
     _cellFocusNodes[row][col].requestFocus();
+  }
+
+  /// Alias for [requestFocusOnCell] to focus a table cell.
+  void focusCell(int row, int col) => requestFocusOnCell(row, col);
+
+  /// Checks if a specific cell currently has input focus.
+  bool isCellFocused(int row, int col) {
+    if (row >= 0 &&
+        row < _cellFocusNodes.length &&
+        col >= 0 &&
+        col < _cellFocusNodes[row].length) {
+      return _cellFocusNodes[row][col].hasFocus;
+    }
+    return false;
+  }
+
+  /// Returns the GlobalKey for a specific cell's BlockWidgetState.
+  GlobalKey<BlockWidgetState>? getCellKey(int row, int col) {
+    if (row >= 0 &&
+        row < _cellKeys.length &&
+        col >= 0 &&
+        col < _cellKeys[row].length) {
+      return _cellKeys[row][col];
+    }
+    return null;
   }
 
   @override
@@ -313,48 +347,66 @@ class TableBlockWidgetState extends State<TableBlockWidget> {
         child: Container(
           color: cell.backgroundColor ?? Colors.transparent,
           padding: widget.editorSettings.tableStyle.cellPadding,
-          child: BlockWidget(
-            key: _cellKeys[row][col],
-            block: cell.block,
-            blockIndex: widget.blockIndex,
-            focusNode: _cellFocusNodes[row][col],
-            editorSettings: widget.editorSettings,
-            onTextChanged: (_, newText) {
-              widget.onCellTextChanged(widget.blockIndex, row, col, newText);
+          child: Builder(
+            builder: (context) {
+              final cellMatches = widget.searchMatches
+                  .where((m) => m.row == row && m.col == col)
+                  .toList();
+              final isActiveInThisCell = widget.activeSearchMatch != null &&
+                  widget.activeSearchMatch!.row == row &&
+                  widget.activeSearchMatch!.col == col;
+              final activeIndex = isActiveInThisCell
+                  ? widget.activeSearchMatch!.matchIndex
+                  : -1;
+
+              return BlockWidget(
+                key: _cellKeys[row][col],
+                block: cell.block,
+                blockIndex: widget.blockIndex,
+                focusNode: _cellFocusNodes[row][col],
+                editorSettings: widget.editorSettings,
+                searchMatches: cellMatches,
+                activeSearchMatchIndex: activeIndex,
+                isDarkMode: widget.isDarkMode,
+                onTextChanged: (_, newText) {
+                  widget.onCellTextChanged(
+                      widget.blockIndex, row, col, newText);
+                },
+                onEnter: (_, __) {
+                  // In table cells, Enter does nothing (no block splitting)
+                },
+                onBackspaceAtStart: (_) {
+                  // In table cells, backspace at start does nothing
+                },
+                onDeleteAtEnd: (_) {
+                  // In table cells, delete at end does nothing
+                },
+                onFocusChanged: (_, hasFocus) {
+                  if (hasFocus) {
+                    setState(() {
+                      _focusedRow = row;
+                      _focusedCol = col;
+                    });
+                  }
+                  widget.onCellFocusChanged(
+                      widget.blockIndex, row, col, hasFocus);
+                },
+                onSelectionChanged: (_, baseOffset, extentOffset) {
+                  widget.onCellSelectionChanged(
+                      widget.blockIndex, row, col, baseOffset, extentOffset);
+                },
+                onPaste: (_) {
+                  widget.onCellPaste(widget.blockIndex, row, col);
+                },
+                readOnly: widget.readOnly,
+                cursorColor: cursorColor,
+                cursorWidth: widget.editorSettings.cursorWidth,
+                cursorRadius: widget.editorSettings.cursorRadius,
+                selectionColor: widget.editorSettings.selectionColor,
+                showDragHandle: false,
+                orderedCount: 0,
+              );
             },
-            onEnter: (_, __) {
-              // In table cells, Enter does nothing (no block splitting)
-            },
-            onBackspaceAtStart: (_) {
-              // In table cells, backspace at start does nothing
-            },
-            onDeleteAtEnd: (_) {
-              // In table cells, delete at end does nothing
-            },
-            onFocusChanged: (_, hasFocus) {
-              if (hasFocus) {
-                setState(() {
-                  _focusedRow = row;
-                  _focusedCol = col;
-                });
-              }
-              widget.onCellFocusChanged(widget.blockIndex, row, col, hasFocus);
-            },
-            onSelectionChanged: (_, baseOffset, extentOffset) {
-              widget.onCellSelectionChanged(
-                  widget.blockIndex, row, col, baseOffset, extentOffset);
-            },
-            onPaste: (_) {
-              widget.onCellPaste(widget.blockIndex, row, col);
-            },
-            readOnly: widget.readOnly,
-            isDarkMode: widget.isDarkMode,
-            cursorColor: cursorColor,
-            cursorWidth: widget.editorSettings.cursorWidth,
-            cursorRadius: widget.editorSettings.cursorRadius,
-            selectionColor: widget.editorSettings.selectionColor,
-            showDragHandle: false,
-            orderedCount: 0,
           ),
         ),
       ),

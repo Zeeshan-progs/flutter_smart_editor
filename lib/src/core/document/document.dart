@@ -110,10 +110,13 @@ abstract class BlockNode {
   BlockNode deepCopy();
 
   ({int spanIndex, int localOffset}) getSpanAt(int globalOffset) {
+    if (spans.isEmpty) {
+      return (spanIndex: 0, localOffset: 0);
+    }
     var current = 0;
     for (var i = 0; i < spans.length; i++) {
       final spanLen = spans[i].text.length;
-      if (globalOffset <= current + spanLen) {
+      if (globalOffset < current + spanLen) {
         return (spanIndex: i, localOffset: globalOffset - current);
       }
       current += spanLen;

@@ -81,6 +81,13 @@ class SmartHtmlParser {
       return;
     }
 
+    // Image tag
+    if (tag == 'img') {
+      final img = _processImageElement(element);
+      if (img != null) blocks.add(img);
+      return;
+    }
+
     // Handle block-level elements
     if (_isBlockTag(tag)) {
       final block = _createBlock(tag, element);
@@ -102,7 +109,7 @@ class SmartHtmlParser {
   bool _isBlockTag(String tag) {
     return const {
       'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div',
-      'ul', 'ol', 'hr', 'table',
+      'ul', 'ol', 'hr', 'table', 'figure',
     }.contains(tag);
   }
 
@@ -117,6 +124,15 @@ class SmartHtmlParser {
       return null;
     }
 
+    final alignment = _parseAlignment(element);
+
+    // If <p>, <figure>, or <div> wraps an <img> tag without substantial text
+    final imgElements = element.getElementsByTagName('img');
+    if (imgElements.isNotEmpty && element.text.trim().isEmpty) {
+      final img = _processImageElement(imgElements.first, parentAlignment: alignment);
+      if (img != null) return img;
+    }
+
     final spans = <TextFormatSpan>[];
     _extractInlineSpans(element, spans, _InlineFormat());
 
@@ -124,9 +140,7 @@ class SmartHtmlParser {
       spans.add(TextFormatSpan.plain(''));
     }
 
-    final alignment = _parseAlignment(element);
-
-    if (tag == 'p' || tag == 'div') {
+    if (tag == 'p' || tag == 'div' || tag == 'figure') {
       return ParagraphNode(spans: spans, alignment: alignment);
     }
 
@@ -468,6 +482,40 @@ class SmartHtmlParser {
     // Handles px, pt, or raw numeric (defaulting to double)
     final cleaned = value.replaceAll(RegExp(r'[a-z]'), '').trim();
     return double.tryParse(cleaned);
+  }
+
+  ImageNode? _processImageElement(
+    dom.Element imgEl, {
+    SmartTextAlign? parentAlignment,
+  }) {
+    final src = imgEl.attributes['src'];
+    if (src == null || src.isEmpty) return null;
+
+    final alt = imgEl.attributes['alt'];
+    final caption = imgEl.attributes['data-caption'] ?? imgEl.attributes['title'];
+    final widthStr = imgEl.attributes['width'];
+    final heightStr = imgEl.attributes['height'];
+    final width = widthStr != null ? double.tryParse(widthStr) : null;
+    final height = heightStr != null ? double.tryParse(heightStr) : null;
+
+    // Check style for alignment
+    var alignment = parentAlignment ?? _parseAlignment(imgEl);
+    final style = imgEl.attributes['style']?.toLowerCase() ?? '';
+    if (style.contains('margin-left: auto') &&
+        style.contains('margin-right: auto')) {
+      alignment = SmartTextAlign.center;
+    } else if (style.contains('margin-left: auto')) {
+      alignment = SmartTextAlign.right;
+    }
+
+    return ImageNode(
+      src: src,
+      alt: alt,
+      caption: caption,
+      width: width,
+      height: height,
+      alignment: alignment,
+    );
   }
 }
 
