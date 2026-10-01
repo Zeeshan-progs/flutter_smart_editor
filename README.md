@@ -7,6 +7,8 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
 
 `flutter_smart_editor` is a full-featured WYSIWYG editor designed from scratch to eliminate the overhead and bugs associated with WebView-based editors. It provides a premium, Material 3 experience with clean HTML input/output.
 
+<img width="3200" height="2000" alt="svgviewer-png-output (1)" src="https://github.com/user-attachments/assets/6400a5e5-80d5-475c-86d0-aecc6a3cab51" />
+
 ## 📌 Table of Contents
 
 - [✨ Features](#-features)
