@@ -13,7 +13,6 @@ mixin LinkEditorMixin on BaseEditorState {
   int? tooltipSpanStart;
   int? tooltipSpanEnd;
   bool _isTooltipRequested = false;
-  int _tooltipRequestId = 0;
   ScrollPosition? _ancestorScrollPosition;
   double? _lastAncestorPixels;
   double? _lastInternalPixels;
@@ -435,7 +434,6 @@ mixin LinkEditorMixin on BaseEditorState {
 
   @override
   void hideLinkTooltip() {
-    _tooltipRequestId++;
     _isTooltipRequested = false;
     _detachScrollListener();
     linkTooltipOverlay?.remove();
