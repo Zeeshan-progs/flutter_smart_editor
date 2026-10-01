@@ -254,7 +254,6 @@ mixin LinkEditorMixin on BaseEditorState {
     }
 
     hideLinkTooltip();
-    final requestId = ++_tooltipRequestId;
     _isTooltipRequested = true;
     tooltipBlockIndex = blockIndex;
     tooltipCellRow = row;
