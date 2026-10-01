@@ -243,6 +243,11 @@ class SmartHtmlSerializer {
 
   /// Serializes a single block node into the buffer
   void _serializeBlock(BlockNode block, StringBuffer buffer) {
+    if (block is ImageNode) {
+      buffer.write(_serializeImage(block));
+      return;
+    }
+
     final tag = block.tag;
     final attributes = <String, String>{};
     final styles = _buildBlockStyle(block);
@@ -261,6 +266,59 @@ class SmartHtmlSerializer {
       styles,
       contentBuffer.toString(),
     ));
+  }
+
+  /// Serializes an [ImageNode] into `<img>` HTML.
+  String _serializeImage(ImageNode img) {
+    final attributes = <String, String>{
+      'src': img.src,
+    };
+    if (img.alt != null && img.alt!.isNotEmpty) {
+      attributes['alt'] = img.alt!;
+    }
+    if (img.caption != null && img.caption!.isNotEmpty) {
+      attributes['data-caption'] = img.caption!;
+      attributes['title'] = img.caption!;
+    }
+    if (img.width != null) {
+      attributes['width'] = img.width!.toInt().toString();
+    }
+    if (img.height != null) {
+      attributes['height'] = img.height!.toInt().toString();
+    }
+
+    final styles = <String, String>{};
+    if (img.alignment == SmartTextAlign.center) {
+      styles['display'] = 'block';
+      styles['margin-left'] = 'auto';
+      styles['margin-right'] = 'auto';
+    } else if (img.alignment == SmartTextAlign.right) {
+      styles['display'] = 'block';
+      styles['margin-left'] = 'auto';
+      styles['margin-right'] = '0';
+    } else if (img.alignment == SmartTextAlign.left) {
+      styles['display'] = 'block';
+      styles['margin-right'] = 'auto';
+    }
+
+    final custom = onTagSerialize?.call(
+      SmartTagType.image,
+      'img',
+      attributes,
+      styles,
+      '',
+    );
+    if (custom != null) return custom;
+
+    if (styles.isNotEmpty) {
+      attributes['style'] =
+          styles.entries.map((e) => '${e.key}: ${e.value}').join('; ');
+    }
+
+    final attrString = attributes.entries
+        .map((e) => ' ${e.key}="${_escapeAttr(e.value)}"')
+        .join('');
+    return '<img$attrString />';
   }
 
   /// Helper to wrap content in a tag, allowing for external interception.

@@ -26,6 +26,7 @@ class SmartEditorSettings {
     this.autoAdjustHeight = true,
     this.ensureVisible = false,
     this.scrollPhysics,
+    this.scrollController,
 
     // Keyboard
     this.inputType = SmartInputType.text,
@@ -127,6 +128,9 @@ class SmartEditorSettings {
 
   /// Custom scroll physics for the editor's scroll view
   final ScrollPhysics? scrollPhysics;
+
+  /// Optional external scroll controller for the editor's scroll view
+  final ScrollController? scrollController;
 
   // ─── Keyboard ───────────────────────────────────────────────
 

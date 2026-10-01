@@ -217,7 +217,8 @@ class TableDocumentController extends ListDocumentController {
         // Horizontal rules aren't supported inside table cells
         return;
       case BlockType.table:
-        // Tables cannot be nested
+      case BlockType.image:
+        // Tables and images cannot be nested or converted as cell blocks
         return;
     }
 

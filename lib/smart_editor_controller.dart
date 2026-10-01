@@ -866,4 +866,82 @@ class SmartEditorController extends ChangeNotifier {
     _documentController.deleteTable(info.blockIndex);
     _editorWidgetState?.rebuild();
   }
+
+  // ─── Image Operations ──────────────────────────────────────────
+
+  /// Delegate function to pick an image from device files or gallery.
+  /// Should return the image as a base64 Data URL or file/network URL, or null if cancelled.
+  Future<String?> Function()? imagePickerDelegate;
+
+  /// Inserts an image block at or after [blockIndex].
+  ///
+  /// If [blockIndex] is null, inserts at the currently focused block or appends to the document.
+  int insertImage({
+    required String src,
+    String? alt,
+    double? width,
+    double? height,
+    String? caption,
+    SmartTextAlign alignment = SmartTextAlign.center,
+    int? blockIndex,
+  }) {
+    final targetIndex = blockIndex ?? _editorWidgetState?.focusedBlockIndex;
+    final index = _documentController.insertImage(
+      src: src,
+      alt: alt,
+      width: width,
+      height: height,
+      caption: caption,
+      alignment: alignment,
+      blockIndex: targetIndex,
+    );
+    _editorWidgetState?.rebuild();
+    return index;
+  }
+
+  /// Updates properties on an existing image block at [blockIndex].
+  void updateImage(
+    int blockIndex, {
+    String? src,
+    String? alt,
+    double? width,
+    double? height,
+    String? caption,
+    SmartTextAlign? alignment,
+  }) {
+    _documentController.updateImage(
+      blockIndex,
+      src: src,
+      alt: alt,
+      width: width,
+      height: height,
+      caption: caption,
+      alignment: alignment,
+    );
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Sets alignment of an image block at [blockIndex].
+  void setImageAlignment(int blockIndex, SmartTextAlign alignment) {
+    _documentController.setImageAlignment(blockIndex, alignment);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Sets size of an image block at [blockIndex].
+  void setImageSize(int blockIndex, {double? width, double? height}) {
+    _documentController.setImageSize(blockIndex, width: width, height: height);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Removes an image block at [blockIndex].
+  void removeImage(int blockIndex) {
+    _documentController.removeImage(blockIndex);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Gets the [ImageNode] at [blockIndex], or null if not an image.
+  ImageNode? getImageNode(int blockIndex) {
+    return _documentController.getImageNode(blockIndex);
+  }
 }
+

@@ -16,6 +16,8 @@ import 'groups/color_button_group.dart';
 import 'groups/table_button_group.dart';
 import 'groups/insert_button_group.dart';
 import 'inputs/link_dialog.dart';
+import '../dialogs/image_import_dialog.dart';
+import '../cropper/smart_image_cropper.dart';
 
 /// A premium Material 3 toolbar for the flutter smart editor.
 class SmartToolbar extends StatefulWidget {
@@ -366,6 +368,11 @@ class SmartToolbarState extends State<SmartToolbar> {
       return;
     }
 
+    if (type == SmartButtonType.insertImage) {
+      _showImageDialog();
+      return;
+    }
+
     if (type == SmartButtonType.findReplace) {
       if (widget.controller.searchState.isBarVisible) {
         widget.controller.hideFindReplace();
@@ -514,6 +521,48 @@ class SmartToolbarState extends State<SmartToolbar> {
           );
         }
         _activeFormats[SmartButtonType.insertLink] = false;
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+    });
+  }
+
+  void _showImageDialog() {
+    ImageImportDialog.show(
+      context,
+      isDarkMode: widget.isDarkMode,
+      onPickFromDevice: widget.controller.imagePickerDelegate,
+    ).then((result) async {
+      if (result != null) {
+        final initialSrc = result['src'] as String?;
+        if (initialSrc == null || initialSrc.isEmpty) {
+          _finishToolbarAction();
+          return;
+        }
+
+        String finalSrc = initialSrc;
+        if (result['action'] == 'crop') {
+          if (!mounted) return;
+          final cropped = await SmartImageCropper.show(
+            context,
+            imageSrc: initialSrc,
+            isDarkMode: widget.isDarkMode,
+          );
+          if (cropped == null || cropped.isEmpty) {
+            _finishToolbarAction();
+            return;
+          }
+          finalSrc = cropped;
+        }
+
+        final (blockIndex, _) = _getEffectiveSelection();
+        widget.controller.insertImage(
+          src: finalSrc,
+          alt: result['alt'] as String?,
+          caption: result['caption'] as String?,
+          blockIndex: blockIndex,
+        );
         widget.onFormatApplied?.call();
         _syncToolbarAfterDocumentChange();
       }

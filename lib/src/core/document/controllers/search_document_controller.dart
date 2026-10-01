@@ -1,10 +1,10 @@
 import 'package:meta/meta.dart';
 import 'package:flutter_smart_editor/src/core/document/document.dart';
 import '../../../models/search/search_index.dart';
-import 'table_document_controller.dart';
+import 'image_document_controller.dart';
 
 /// Controller handling live document searching, regex parsing, and atomic match replacement.
-class SearchDocumentController extends TableDocumentController {
+class SearchDocumentController extends ImageDocumentController {
   SearchDocumentController({
     super.document,
     super.undoRedoManager,

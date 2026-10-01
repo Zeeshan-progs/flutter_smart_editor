@@ -53,6 +53,18 @@ class InsertButtonGroup extends StatelessWidget {
       ));
     }
 
+    // ── Insert Picture ──
+    if (group.picture) {
+      buttons.add(_InsertPictureButton(
+        onAction: onAction,
+        onSurface: onSurface,
+        disabledColor: disabledColor,
+        enabled: enabled,
+        itemHeight: itemHeight,
+        buttonIconSize: buttonIconSize,
+      ));
+    }
+
     // ── Insert Table ──
     if (group.table) {
       buttons.add(_InsertTableButton(
@@ -132,6 +144,48 @@ class _InsertLinkButton extends StatelessWidget {
               Icons.link,
               size: buttonIconSize,
               color: color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The "Insert Picture" button.
+class _InsertPictureButton extends StatelessWidget {
+  const _InsertPictureButton({
+    required this.onAction,
+    required this.onSurface,
+    required this.disabledColor,
+    required this.enabled,
+    required this.itemHeight,
+    required this.buttonIconSize,
+  });
+
+  final Function(SmartButtonType type, {dynamic value}) onAction;
+  final Color onSurface;
+  final Color disabledColor;
+  final bool enabled;
+  final double itemHeight;
+  final double buttonIconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: Tooltip(
+        message: 'Insert Image',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: enabled ? () => onAction(SmartButtonType.insertImage) : null,
+          child: SizedBox(
+            width: itemHeight,
+            height: itemHeight,
+            child: Icon(
+              Icons.image_outlined,
+              size: buttonIconSize,
+              color: enabled ? onSurface : disabledColor,
             ),
           ),
         ),

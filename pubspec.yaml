@@ -12,7 +12,11 @@ dependencies:
     sdk: flutter
   flutter_colorpicker: ^1.1.0
   html: ^0.15.4
+  image_cropper: ^12.2.1
+  image_picker: ^1.2.3
   meta: ">=1.0.0 <2.0.0"
+  path_provider: ^2.1.6
+  permission_handler: ^13.0.2
   super_clipboard: ^0.9.1
 
 dev_dependencies:

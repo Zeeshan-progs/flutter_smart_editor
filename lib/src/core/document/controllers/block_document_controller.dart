@@ -149,7 +149,8 @@ class BlockDocumentController extends BaseDocumentController {
         newBlock = HorizontalRuleNode(id: id);
         break;
       case BlockType.table:
-        // Tables cannot be converted to/from other block types
+      case BlockType.image:
+        // Tables and images cannot be converted to/from other block types
         return;
     }
 
