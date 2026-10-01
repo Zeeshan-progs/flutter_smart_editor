@@ -13,6 +13,7 @@ mixin BlockEditorMixin on BaseEditorState {
   /// Called when Enter is pressed in a block
   @protected
   void onEnter(int blockIndex, int offset) {
+    hideLinkTooltip();
     widget.editorSettings.onEnter?.call();
 
     final block = document.blocks[blockIndex];
@@ -86,6 +87,7 @@ mixin BlockEditorMixin on BaseEditorState {
 
   @protected
   void onIncreaseIndent(int blockIndex) {
+    hideLinkTooltip();
     docController.increaseIndent(
       blockIndex,
       maxDepth: widget.editorSettings.maxListDepth,
@@ -96,6 +98,7 @@ mixin BlockEditorMixin on BaseEditorState {
 
   @protected
   void onDecreaseIndent(int blockIndex) {
+    hideLinkTooltip();
     final id = document.blocks[blockIndex].id;
     final cursorOffset = blockKeys[id]?.currentState?.cursorOffset ?? 0;
 
@@ -117,6 +120,7 @@ mixin BlockEditorMixin on BaseEditorState {
 
   @protected
   void onHrTap(int blockIndex) {
+    hideLinkTooltip();
     final nextIndex = blockIndex + 1;
     if (nextIndex < document.blocks.length) {
       final id = document.blocks[nextIndex].id;
@@ -150,6 +154,7 @@ mixin BlockEditorMixin on BaseEditorState {
   /// Called when Backspace is pressed at the start of a block
   @protected
   void onBackspaceAtStart(int blockIndex) {
+    hideLinkTooltip();
     if (blockIndex <= 0) return;
 
     final currentBlock = document.blocks[blockIndex];
@@ -202,6 +207,7 @@ mixin BlockEditorMixin on BaseEditorState {
   /// Called when Delete is pressed at the end of a block
   @protected
   void onDeleteAtEnd(int blockIndex) {
+    hideLinkTooltip();
     if (blockIndex >= document.blocks.length - 1) return;
 
     final nextBlock = document.blocks[blockIndex + 1];

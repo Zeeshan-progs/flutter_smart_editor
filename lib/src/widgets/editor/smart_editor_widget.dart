@@ -78,6 +78,7 @@ class SmartEditorWidgetState extends BaseEditorState
         SearchEditorMixin {
   /// Called when a block is reordered
   void _onReorder(int oldUnitIndex, int newUnitIndex) {
+    hideLinkTooltip();
     final units = _getEditorUnits();
     if (oldUnitIndex < 0 || oldUnitIndex >= units.length) return;
 
@@ -299,9 +300,11 @@ class SmartEditorWidgetState extends BaseEditorState
 
     final editorContent = NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification is ScrollUpdateNotification ||
-            notification is ScrollStartNotification) {
-          hideLinkTooltip();
+        if (notification is ScrollUpdateNotification) {
+          if (notification.scrollDelta != null &&
+              notification.scrollDelta!.abs() > 1.0) {
+            hideLinkTooltip();
+          }
         }
         return false;
       },

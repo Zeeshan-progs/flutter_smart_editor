@@ -208,10 +208,13 @@ abstract class BaseEditorState extends State<SmartEditorWidget> {
   Map<SmartButtonType, dynamic> getMergedFormats(int blockIndex, int offset) =>
       {};
   void setCursorPosition(int blockIndex, int docOffset, {int? row, int? col}) {}
+  void setSelection(int blockIndex, int startOffset, int endOffset,
+      {int? row, int? col}) {}
   void setPendingInlineFormat(PendingInlineFormat format) {}
   double? pendingStrutFontSize(int index) => null;
   void onPaste(int blockIndex) {}
   void hideLinkTooltip() {}
-  void checkLinkTooltip(int blockIndex, int offset) {}
-  void checkCellLinkTooltip(int blockIndex, int row, int col, int offset) {}
+  void checkLinkTooltip(int blockIndex, int minOffset, [int? maxOffset]) {}
+  void checkCellLinkTooltip(
+      int blockIndex, int row, int col, int minOffset, [int? maxOffset]) {}
 }

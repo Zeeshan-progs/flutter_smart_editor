@@ -15,6 +15,7 @@ mixin ImageEditorMixin on BaseEditorState {
   void selectImage(int blockIndex) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
     if (document.blocks[blockIndex] is! ImageNode) return;
+    hideLinkTooltip();
 
     // Unfocus active text block cleanly to avoid viewport jump or scrolling to top
     FocusManager.instance.primaryFocus?.unfocus(
@@ -50,6 +51,7 @@ mixin ImageEditorMixin on BaseEditorState {
   /// Removes the image block at [blockIndex] and clears active selection.
   void onImageRemove(int blockIndex) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    hideLinkTooltip();
     docController.removeImage(blockIndex);
     if (selectedImageBlockIndex == blockIndex) {
       selectedImageBlockIndex = null;
@@ -60,6 +62,7 @@ mixin ImageEditorMixin on BaseEditorState {
   /// Changes alignment of the image block at [blockIndex].
   void onImageAlignment(int blockIndex, SmartTextAlign alignment) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    hideLinkTooltip();
     docController.setImageAlignment(blockIndex, alignment);
     rebuild();
   }
@@ -67,6 +70,7 @@ mixin ImageEditorMixin on BaseEditorState {
   /// Resizes the image block at [blockIndex] with width and/or height.
   void onImageResize(int blockIndex, {double? width, double? height}) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    hideLinkTooltip();
     docController.setImageSize(blockIndex, width: width, height: height);
     rebuild();
   }
@@ -74,6 +78,7 @@ mixin ImageEditorMixin on BaseEditorState {
   /// Updates the image src at [blockIndex] with cropped image data.
   void onImageCrop(int blockIndex, String croppedSrc) {
     if (blockIndex < 0 || blockIndex >= document.blocks.length) return;
+    hideLinkTooltip();
     docController.updateImage(blockIndex, src: croppedSrc);
     rebuild();
   }

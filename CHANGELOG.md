@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.2.0
+
+### 🚀 Features
+
+- **Image Blocks**:
+  - Pure Flutter image block representation (`ImageNode`, `BlockType.image`) with zero WebView dependency.
+  - Multi-source image import via `ImageImportDialog`: remote web URLs, device gallery & camera with built-in permission management (`permission_handler`), and base64 Data URLs.
+  - Integrated cropping using `image_cropper` (`SmartImageCropper`) with customizable platform styles.
+  - Interactive on-click contextual toolbar offering **✂️ Crop**, **↔️ Align** (Left, Center, Right), **📐 Resize** quick presets (25%, 50%, 75%, 100%), and **🗑️ Remove**.
+  - Captions and accessibility `alt` text support with complete HTML serialization (`<img src="..." alt="..." data-caption="..." />`).
+  - Drag-and-drop block reordering support through `draggableBlockTypes: {BlockType.image}`.
+  - Comprehensive programmatic APIs on `SmartEditorController` (`insertImage`, `updateImage`, `removeImage`, `setImageAlignment`, `setImageSize`, `getImageNode`).
+
+- **Find & Replace**:
+  - Floating native search overlay with live match counting (`n of total`) and search options (Match Case, Whole Word, Regular Expressions).
+  - Real-time match highlighting across document text and table cells with customizable active & inactive colors.
+  - Bidirectional match traversal, single Replace, and Replace All with atomic undo/redo history.
+  - Standard keyboard shortcuts (`Cmd/Ctrl+F` to find, `Cmd/Ctrl+H` to replace, `Escape` to close).
+  - Granular configuration via `SmartEditorSettings.enableFindReplace` and `SmartOtherButtons(findReplace: true)`.
+
+- **Hyperlinks**:
+  - Dedicated dialog for inserting and editing links (`LinkDialog`) with auto-population from current text selection.
+  - Contextual link management (open URL, edit link/display text, or unlink) without losing formatting.
+  - Full HTML round-trip parsing and serialization of `<a>` tags with `href` and `target` attributes.
+  - Atomic undo/redo support for link applications and removals.
+
 ## 2.1.0
 
 ### 🚀 Features
