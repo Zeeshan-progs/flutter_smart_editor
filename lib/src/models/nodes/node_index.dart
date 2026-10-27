@@ -4,3 +4,6 @@ export 'list_item_node_model.dart';
 export 'hr_node_model.dart';
 export 'table_node_model.dart';
 export 'image_node_model.dart';
+export 'video_node_model.dart';
+export 'audio_node_model.dart';
+export 'document_node_model.dart';

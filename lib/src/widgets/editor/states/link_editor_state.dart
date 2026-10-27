@@ -261,6 +261,7 @@ mixin LinkEditorMixin on BaseEditorState {
     tooltipSpanEnd = spanEnd;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // if (!_isTooltipRequested || !mounted) return;
       final overlayState = Overlay.maybeOf(context, rootOverlay: true);
       if (overlayState == null) return;
 

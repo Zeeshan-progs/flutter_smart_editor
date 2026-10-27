@@ -3,12 +3,12 @@
 A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebViews, no JavaScript—built entirely for native performance and full control.
 
 [![Pub Version](https://img.shields.io/pub/v/flutter_smart_editor)](https://pub.dev/packages/flutter_smart_editor)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 `flutter_smart_editor` is a full-featured WYSIWYG editor designed from scratch to eliminate the overhead and bugs associated with WebView-based editors. It provides a premium, Material 3 experience with clean HTML input/output.
 
 ## 📌 Table of Contents
 
+- [💡 Why Smart Editor?](#-why-smart-editor)
 - [✨ Features](#-features)
 - [🚀 Getting Started](#-getting-started)
 - [📖 Basic Usage](#-basic-usage)
@@ -28,21 +28,36 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
     - [Button & Text Styling](#button--text-styling)
     - [Dropdown Styling](#dropdown-styling)
     - [Interceptors](#interceptors)
-  - [3. Interactive List Customization] (#3-interactive-list-customization)
+  - [3. Interactive List Customization](#3-interactive-list-customization)
     - [Enabling the Bullet Picker](#enabling-the-bullet-picker)
     - [Customizing Available Styles](#customizing-available-styles)
     - [Custom Serialization Example](#custom-serialization-example)
-  - [4. Programmatic APIs (Tables, Lists, Hyperlinks, Search & Images)](#4-programmatic-apis-tables-lists-hyperlinks-search--images)
-    - [📊 Table Management APIs](#-table-management-apis)
-    - [🔢 List & Numbered List APIs](#-list--numbered-list-apis)
-    - [🔗 Hyperlink Management APIs](#-hyperlink-management-apis)
-    - [🔍 Find & Replace APIs](#-find--replace-apis)
-    - [🖼️ Image Block APIs](#️-image-block-apis)
+  - [4. Programmatic APIs (Tables, Lists, Hyperlinks, Search & Media Attachments)](#4-programmatic-apis-tables-lists-hyperlinks-search--media-attachments)
+    - [Table Management APIs](#-table-management-apis)
+    - [List & Numbered List APIs](#-list--numbered-list-apis)
+    - [Hyperlink Management APIs](#-hyperlink-management-apis)
+    - [Find & Replace APIs](#-find--replace-apis)
+    - [Media & Attachment APIs](#️-media--attachment-apis-images-video-audio--documents)
 - [🎛️ Toolbar Customization](#️-toolbar-customization)
-- [🏃 Migration Guide] (#-migration-guide-v10x--v200)
+- [🏃 Migration Guide](#-migration-guide-v10x--v200)
 - [🛠️ Upcoming Features](#️-upcoming-features)
 - [❓ Troubleshooting](#-troubleshooting)
 - [📄 License](#-license)
+
+## 💡 Why Smart Editor?
+
+Most rich text editors for Flutter rely heavily on hidden WebViews and JavaScript bridges (`flutter_inappwebview`, `webview_flutter`, or embedded `contenteditable` HTML elements). While fast to prototype, WebView-based solutions face significant architectural limitations:
+
+- **Heavy overhead & jank**: Running a complete browser engine under the hood introduces unnecessary memory consumption and micro-stutters.
+- **Keyboard & focus glitches**: Fragile IME integration, virtual keyboard resizing issues, and unreliable cursor positioning across iOS and Android.
+- **Platform view constraints**: Inability to seamlessly embed native Flutter widgets (such as custom audio players, video renderers, or interactive buttons) into the text flow.
+
+**Flutter Smart Editor** is engineered **100% in pure Dart and Flutter**:
+
+- ⚡ **Zero WebViews & Zero JavaScript**: Rendered and laid out completely through Flutter's native widget and render object tree for 60/120 FPS fluidity.
+- 🎨 **Deep Flutter Customization**: Use your own Flutter widgets for audio blocks, video blocks, custom attachments, dialogs, and toolbar buttons.
+- 📱 **Native Performance & Fluidity**: Natural touch gestures, seamless platform scrolling, and rock-solid platform IME text editing.
+- 📄 **Clean HTML In & Out**: Robust internal HTML parser and serializer producing clean, semantic HTML without proprietary bloat.
 
 ## ✨ Features
 
@@ -63,10 +78,10 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
 - **Tables (v2.1+)**: Full support for HTML tables with dynamic row/column management (insertion, deletion, and cell updates).
 - **Hyperlinks (v2.2+)**: Native link insertion, editing, and removal dialogs, URL normalization, display text replacement, and custom tap listeners.
 - **Find & Replace (v2.2+)**: Floating search overlay with real-time match highlighting, regex, whole word, match case, hyperlink preservation, and atomic single-step undo.
-- **Image Blocks (v2.2+)**: Full image support with URL import, device Camera/Gallery picking (via `image_picker`), interactive cropping (via `image_cropper`), in-editor resizing, alignment (left/center/right), captions, alt text, and contextual action toolbar (Crop, Remove, Align, Resize).
+- **Media & Attachments (v2.3+)**: Comprehensive support for Images, Videos, Audio, and Documents with unified attachment dialogs, device picker delegates, interactive image cropping, custom media player builders (`audioBuilder`, `videoBuilder`), captions, alt text, and full HTML serialization.
 - **Mobile Optimized**: Smart backspace bridge for soft keyboards and accessory bar avoidance.
 - **Undo/Redo**: Built-in history management.
-- **Material 3 Toolbar**: **Scrollable**, **Grid**, or **Expandable** layouts.
+- **Material 3 Toolbar**: **Scrollable**, **Grid**, or enhanced **Expandable** layouts with clean single-toolbar toggling and dynamic wrap spacing.
 
 ---
 
@@ -76,7 +91,7 @@ Add `flutter_smart_editor` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_smart_editor: ^2.2.0
+  flutter_smart_editor: ^2.3.0
 ```
 
 ## 📖 Basic Usage
@@ -187,6 +202,13 @@ SmartEditor(
 | `onLinkTapped` | `(String url)` | Triggered when a hyperlink is tapped in the editor. |
 | `onKeyUp` / `onKeyDown` | `(String? key)` | Raw key event callbacks. |
 
+#### Media & Attachment Builders (v2.3+)
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `audioBuilder` | `AudioNodeBuilder?` | `null` | Custom builder to render audio nodes using your preferred audio player. |
+| `videoBuilder` | `VideoNodeBuilder?` | `null` | Custom builder to render video nodes using your preferred video player. |
+
 ### 🛠️ Interactive List Customization
 
 Version 2.1.0 introduces the ability for users to live-change their bullet point symbols (pointers).
@@ -245,7 +267,7 @@ SmartEditorSettings(
 )
 ```
 
-### 4. Programmatic APIs (Tables, Lists, Hyperlinks, Search & Images)
+### 4. Programmatic APIs (Tables, Lists, Hyperlinks, Search & Media Attachments)
 
 `SmartEditorController` provides a rich set of programmatic APIs to manipulate tables, lists, hyperlinks, and document search dynamically from your parent widgets, custom toolbar buttons, or keyboard listeners.
 
@@ -416,73 +438,143 @@ SmartEditor(
 );
 ```
 
-#### 🖼️ Image Block APIs
+#### 📎 Multi-Media & Attachment APIs (Images, Audio, Video & Documents)
 
-Version 2.2.0 introduces native image blocks with full lifecycle management: URL import, device Camera/Gallery picking (with runtime permissions), interactive cropping, resizing, alignment, captions, alt text, and a contextual action toolbar.
+Version 2.3.0 introduces a unified multi-media and attachment system supporting **Images**, **Videos**, **Audio**, and **Documents** with zero WebView dependencies. It includes a unified attachment dialog (`SmartAttachmentDialog`), bottom sheet selector (`SmartAttachmentBottomSheet`), camera/gallery picking, native image cropping, customizable audio/video player builders, captions, and full HTML round-trip serialization.
 
-##### Image Node Model (`ImageNode`)
+##### Node Models
 
-| Property | Type | Default | Description |
+| Model | Block Type | HTML Tag | Description |
 | :--- | :--- | :--- | :--- |
-| `src` | `String` | *(required)* | Image source: network URL (`https://...`), local file path, or base64 Data URL (`data:image/png;base64,...`). |
-| `alt` | `String?` | `null` | Accessibility text (HTML `alt` attribute). |
-| `width` | `double?` | `null` | Display width in logical pixels. `null` = intrinsic width. |
-| `height` | `double?` | `null` | Display height in logical pixels. `null` = intrinsic height. |
-| `caption` | `String?` | `null` | Optional caption text displayed below the image. |
-| `alignment` | `SmartTextAlign` | `.center` | Horizontal alignment: `.left`, `.center`, or `.right`. |
+| `ImageNode` | `BlockType.image` | `<img src="..." alt="..." data-caption="..." />` | Image block with alignment, resizing, cropping, captions, and alt text. |
+| `VideoNode` | `BlockType.video` | `<video src="..." poster="..."></video>` | Video block with optional captions, posters, and custom player builder support. |
+| `AudioNode` | `BlockType.audio` | `<audio src="..." title="..."></audio>` | Audio block with titles, authors, and custom player builder support. |
+| `DocumentNode` | `BlockType.document` | `<a href="..." data-attachment="document">...</a>` | Document attachment block showing filename, extension, and file size. |
 
 ##### Controller APIs (`SmartEditorController`)
 
 | Method / Getter | Return Type | Description |
 | :--- | :--- | :--- |
-| `insertImage({required String src, String? alt, double? width, double? height, String? caption, SmartTextAlign alignment, int? blockIndex})` | `int` | Inserts a new image block at or after the given `blockIndex` (or the focused block). Returns the index of the inserted `ImageNode`. Automatically appends an empty paragraph after the image if it is at the end of the document. |
-| `updateImage(int blockIndex, {String? src, String? alt, double? width, double? height, String? caption, SmartTextAlign? alignment})` | `void` | Updates any combination of properties on an existing `ImageNode` at `blockIndex`. |
-| `setImageAlignment(int blockIndex, SmartTextAlign alignment)` | `void` | Convenience method to change only the alignment of an image block. |
+| `insertImage({required String src, String? alt, double? width, double? height, String? caption, SmartTextAlign alignment, int? blockIndex})` | `int` | Inserts an image block at or after `blockIndex`. Automatically appends an empty paragraph if at document end. |
+| `updateImage(int blockIndex, {...})` | `void` | Updates properties (src, caption, dimensions, alignment) on an existing image block. |
+| `setImageAlignment(int blockIndex, SmartTextAlign alignment)` | `void` | Convenience method to change image alignment. |
 | `setImageSize(int blockIndex, {double? width, double? height})` | `void` | Convenience method to resize an image block. |
-| `removeImage(int blockIndex)` | `void` | Deletes the image block at `blockIndex`. Ensures the document always retains at least one empty paragraph. |
-| `getImageNode(int blockIndex)` | `ImageNode?` | Returns the `ImageNode` at `blockIndex`, or `null` if the block is not an image. |
-| `imagePickerDelegate` | `Future<String?> Function()?` | Optional delegate for custom device image picking. When set, the import dialog calls this instead of the built-in Camera/Gallery picker. Should return a base64 Data URL, file path, or network URL (or `null` if cancelled). |
-
-##### Document Controller APIs (`DocumentController`)
-
-For lower-level control, these methods are available directly on `controller.documentController`:
-
-| Method | Return Type | Description |
-| :--- | :--- | :--- |
-| `insertImage({required String src, ...})` | `int` | Inserts an `ImageNode` into the document block list. |
-| `updateImage(int blockIndex, {...})` | `void` | Mutates properties on an existing `ImageNode` in place. |
-| `setImageAlignment(int blockIndex, SmartTextAlign)` | `void` | Sets alignment on the image block. |
-| `setImageSize(int blockIndex, {double? width, double? height})` | `void` | Sets width/height on the image block. |
-| `removeImage(int blockIndex)` | `void` | Removes the image block from the document. |
+| `removeImage(int blockIndex)` | `void` | Deletes the image block at `blockIndex`. |
 | `getImageNode(int blockIndex)` | `ImageNode?` | Returns the `ImageNode` or `null`. |
+| `insertVideo({required String src, String? caption, double? width, double? height, String? poster, SmartTextAlign alignment, int? blockIndex})` | `int` | Inserts a video block at or after `blockIndex`. |
+| `updateVideo(int blockIndex, {...})` | `void` | Updates properties on an existing video block. |
+| `removeVideo(int blockIndex)` | `void` | Deletes the video block at `blockIndex`. |
+| `getVideoNode(int blockIndex)` | `VideoNode?` | Returns the `VideoNode` or `null`. |
+| `insertAudio({required String src, String? title, String? author, SmartTextAlign alignment, int? blockIndex})` | `int` | Inserts an audio block at or after `blockIndex`. |
+| `updateAudio(int blockIndex, {...})` | `void` | Updates properties on an existing audio block. |
+| `removeAudio(int blockIndex)` | `void` | Deletes the audio block at `blockIndex`. |
+| `getAudioNode(int blockIndex)` | `AudioNode?` | Returns the `AudioNode` or `null`. |
+| `insertDocument({required String src, required String fileName, int? fileSize, String? fileExtension, SmartTextAlign alignment, int? blockIndex})` | `int` | Inserts a document file attachment block at or after `blockIndex`. |
+| `updateDocument(int blockIndex, {...})` | `void` | Updates properties on an existing document block. |
+| `removeDocument(int blockIndex)` | `void` | Deletes the document block at `blockIndex`. |
+| `getDocumentNode(int blockIndex)` | `DocumentNode?` | Returns the `DocumentNode` or `null`. |
+
+##### Device Picker Delegates
+
+You can override how files are picked on the user's device by supplying delegates on `controller`:
+
+```dart
+final controller = SmartEditorController();
+
+// 1. Pick images from camera/gallery
+controller.imagePickerDelegate = () async {
+  return 'data:image/png;base64,...';
+};
+
+// 2. Pick videos from device
+controller.videoPickerDelegate = () async {
+  return SmartAttachmentData(
+    src: '/path/to/video.mp4',
+    name: 'demo.mp4',
+    type: SmartAttachmentType.video,
+  );
+};
+
+// 3. Pick audio files from device
+controller.audioPickerDelegate = () async {
+  return SmartAttachmentData(
+    src: '/path/to/song.mp3',
+    name: 'audio.mp3',
+    type: SmartAttachmentType.audio,
+  );
+};
+
+// 4. Pick documents (PDF, DOCX, ZIP)
+controller.filePickerDelegate = () async {
+  return SmartAttachmentData(
+    src: '/path/to/doc.pdf',
+    name: 'Report.pdf',
+    fileSize: 1048576,
+    fileExtension: 'pdf',
+    type: SmartAttachmentType.document,
+  );
+};
+
+// Or use the unified attachment delegate for all types
+controller.attachmentPickerDelegate = (SmartAttachmentType type) async {
+  // Return SmartAttachmentData based on type
+  return null;
+};
+```
+
+##### Custom Media Player Builders
+
+Easily connect your preferred third-party audio/video player (e.g. `chewie`, `audioplayers`, `just_audio`, `video_player`) through `SmartEditorSettings`:
+
+```dart
+SmartEditor(
+  controller: controller,
+  editorSettings: SmartEditorSettings(
+    // Custom video player builder
+    videoBuilder: (context, videoNode) {
+      return MyCustomVideoPlayer(
+        url: videoNode.src,
+        caption: videoNode.caption,
+      );
+    },
+    // Custom audio player builder
+    audioBuilder: (context, audioNode) {
+      return MyCustomAudioPlayer(
+        url: audioNode.src,
+        title: audioNode.title,
+      );
+    },
+  ),
+)
+```
 
 ##### Toolbar Configuration
 
-Enable the image button in the toolbar via `SmartInsertButtons`:
+Configure attachment options in `SmartToolbarSettings` via `SmartInsertButtons`:
 
 ```dart
 SmartToolbarSettings(
   defaultButtons: [
-    // ... other button groups ...
     const SmartInsertButtons(
       link: true,
-      picture: true,   // Enables the Image import button
       table: true,
+      attachment: true, // Enables the attachment button
+      enabledAttachments: {
+        SmartAttachmentType.image,
+        SmartAttachmentType.video,
+        SmartAttachmentType.audio,
+        SmartAttachmentType.document,
+      },
     ),
   ],
 )
 ```
 
-When the user clicks the image button, the `ImageImportDialog` opens with two tabs:
+When clicked:
 
-| Tab | Feature | Details |
-| :--- | :--- | :--- |
-| **URL** | Web URL import | Paste a network URL, see a live preview, add optional caption and alt text. |
-| **Device** | Camera / Gallery | Pick from Camera or Gallery with runtime permission handling (`permission_handler`). Captured image is converted to a base64 Data URL. |
-
-Both tabs offer two actions:
-- **Insert** — inserts the image directly into the editor.
-- **Crop & Insert** — opens the native `image_cropper` (iOS: `TOCropViewController`, Android: `UCropActivity`) before insertion.
+- If **multiple** attachment types are enabled, `SmartAttachmentBottomSheet` opens with options.
+- If **only one** attachment type is enabled, `SmartAttachmentDialog` opens directly.
+- The dialog allows remote URL imports, device file picking, captions, and optional cropping for images.
 
 ##### Interactive Image Block Widget
 
@@ -506,15 +598,15 @@ The built-in cropper wraps the official [`image_cropper`](https://pub.dev/packag
 
 ##### Platform Dependencies
 
-The image feature requires these packages in your app's `pubspec.yaml`:
+Add to your app's `pubspec.yaml` if utilizing device camera/gallery or file pickers:
 
 ```yaml
 dependencies:
-  flutter_smart_editor: ^2.2.0
-  # These are transitive dependencies of flutter_smart_editor,
-  # but you may need platform-specific setup:
+  flutter_smart_editor: ^2.3.0
+  # Transitive dependencies of flutter_smart_editor:
   # - image_picker: Camera/Gallery access
   # - image_cropper: Native cropping UI
+  # - file_picker: Document & file access
   # - permission_handler: Runtime permission requests
 ```
 
@@ -532,57 +624,8 @@ dependencies:
 ```xml
 <uses-permission android:name="android.permission.CAMERA" />
 <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-```
-
-##### Code Example: Programmatic Image Management
-
-```dart
-final controller = SmartEditorController();
-
-// 1. Insert an image from a URL
-controller.insertImage(
-  src: 'https://example.com/photo-1579783900882-c0d3dad7b119?w=600',
-  alt: 'Sample Artwork',
-  caption: 'A beautiful photo from Unsplash',
-);
-
-// 2. Insert an image with custom dimensions and alignment
-controller.insertImage(
-  src: 'data:image/png;base64,iVBORw0KGgo...',
-  alt: 'Logo',
-  width: 200,
-  height: 100,
-  alignment: SmartTextAlign.left,
-  blockIndex: 0, // Insert at the top of the document
-);
-
-// 3. Update an existing image block
-controller.updateImage(
-  2, // block index
-  caption: 'Updated caption',
-  alignment: SmartTextAlign.right,
-);
-
-// 4. Resize an image
-controller.setImageSize(2, width: 400, height: 300);
-
-// 5. Query an image block
-final node = controller.getImageNode(2);
-if (node != null) {
-  print('Image src: ${node.src}');
-  print('Caption: ${node.caption}');
-  print('Alignment: ${node.alignment}');
-}
-
-// 6. Remove an image block
-controller.removeImage(2);
-
-// 7. Custom image picker delegate
-controller.imagePickerDelegate = () async {
-  // Your custom image picking logic
-  // Return a base64 Data URL, file path, or network URL
-  return 'data:image/png;base64,iVBORw0KGgo...';
-};
+<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 ```
 
 ---
@@ -637,7 +680,7 @@ SmartToolbarSettings(
 | `SmartFontFamilyButtons` | A dropdown for selecting from your application's available font families. |
 | `SmartListButtons` | Bullet/Numbered list toggles, horizontal dividers (HR), and the premium Bullet Style Picker. |
 | `SmartParagraphButtons` | Text alignment controls: Left, Center, Right, and Full Justify. |
-| `SmartInsertButtons` | Insert elements: Hyperlinks (`link: true`), Images, and HTML Tables. |
+| `SmartInsertButtons` | Insert elements: Hyperlinks (`link: true`), Multi-Media Attachments (`attachment: true` for images, video, audio, documents), and HTML Tables (`table: true`). |
 | `SmartOtherButtons` | Utility actions: Undo, Redo, Copy to Clipboard, Paste, and Find & Replace (`findReplace: true`). |
 
 ---
@@ -648,7 +691,7 @@ SmartToolbarSettings(
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `toolbarType` | `SmartToolbarType` | `.scrollable` | Layout: `.scrollable`, `.grid`, or `.expandable`. |
+| `toolbarType` | `SmartToolbarType` | `.scrollable` | Layout: `.scrollable`, `.grid`, or enhanced `.expandable` (single toolbar with smooth toggle between scroll and multi-line wrap). |
 | `toolbarPosition` | `SmartToolbarPosition` | `.above` | Position relative to editor: `.above` or `.below`. |
 | `initiallyExpanded` | `bool` | `false` | Starts the expandable toolbar in the open state. |
 | `showBorder` | `bool` | `false` | Separation border between editor and toolbar. |
@@ -731,6 +774,8 @@ SmartEditor(
 - [ ] **Markdown Shortcuts**: Auto-format headers and lists during typing.
 - [x] **Find & Replace**: Native search overlay with match highlighting.
 - [x] **Image Blocks**: Support for network/local/camera images with cropping, resizing, and alignment.
+- [x] **Multi-Media Attachments**: Native audio, video, and document blocks with custom media player builders.
+- [x] **Expandable Toolbar Polish**: Clean single-toolbar toggling without duplicate rows or orphan separators.
 - [ ] **Code Blocks**: Syntax highlighting for 100+ languages.
 - [x] **Hyperlinks**: Comprehensive link insertion and management dialogs.
 - [ ] **Focus Mode**: Zen mode for distraction-free writing.

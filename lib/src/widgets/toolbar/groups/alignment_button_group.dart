@@ -32,13 +32,13 @@ class AlignmentButtonGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final buttons = <Widget>[];
-    
+
     if (group.alignLeft) {
       buttons.add(ToolbarButton(
           icon: Icons.format_align_left,
           isActive: activeFormats[SmartButtonType.alignLeft] == true,
-          onPressed: () => onAction(SmartButtonType.alignLeft,
-              value: SmartTextAlign.left),
+          onPressed: () =>
+              onAction(SmartButtonType.alignLeft, value: SmartTextAlign.left),
           activeColor: activeColor,
           activeBg: activeBg,
           onSurface: onSurface,
@@ -48,7 +48,7 @@ class AlignmentButtonGroup extends StatelessWidget {
           iconSize: buttonIconSize,
           tooltip: 'Align Left'));
     }
-    
+
     if (group.alignCenter) {
       buttons.add(ToolbarButton(
           icon: Icons.format_align_center,
@@ -64,13 +64,13 @@ class AlignmentButtonGroup extends StatelessWidget {
           iconSize: buttonIconSize,
           tooltip: 'Align Center'));
     }
-    
+
     if (group.alignRight) {
       buttons.add(ToolbarButton(
           icon: Icons.format_align_right,
           isActive: activeFormats[SmartButtonType.alignRight] == true,
-          onPressed: () => onAction(SmartButtonType.alignRight,
-              value: SmartTextAlign.right),
+          onPressed: () =>
+              onAction(SmartButtonType.alignRight, value: SmartTextAlign.right),
           activeColor: activeColor,
           activeBg: activeBg,
           onSurface: onSurface,
@@ -80,7 +80,7 @@ class AlignmentButtonGroup extends StatelessWidget {
           iconSize: buttonIconSize,
           tooltip: 'Align Right'));
     }
-    
+
     if (group.alignJustify) {
       buttons.add(ToolbarButton(
           icon: Icons.format_align_justify,
@@ -96,7 +96,7 @@ class AlignmentButtonGroup extends StatelessWidget {
           iconSize: buttonIconSize,
           tooltip: 'Align Justify'));
     }
-    
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: buttons,

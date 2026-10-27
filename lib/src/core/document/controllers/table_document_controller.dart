@@ -218,7 +218,10 @@ class TableDocumentController extends ListDocumentController {
         return;
       case BlockType.table:
       case BlockType.image:
-        // Tables and images cannot be nested or converted as cell blocks
+      case BlockType.video:
+      case BlockType.audio:
+      case BlockType.document:
+        // Tables, images, and media cannot be nested or converted as cell blocks
         return;
     }
 

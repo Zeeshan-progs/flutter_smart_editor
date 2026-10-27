@@ -21,3 +21,7 @@ export 'src/models/enums.dart';
 
 // Search & Replace models
 export 'src/models/search/search_index.dart';
+
+// Attachment data model & dialogs
+export 'src/models/attachment_data.dart';
+export 'src/widgets/dialogs/smart_attachment_dialog.dart';

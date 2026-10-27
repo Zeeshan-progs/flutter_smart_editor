@@ -248,6 +248,21 @@ class SmartHtmlSerializer {
       return;
     }
 
+    if (block is VideoNode) {
+      buffer.write(_serializeVideo(block));
+      return;
+    }
+
+    if (block is AudioNode) {
+      buffer.write(_serializeAudio(block));
+      return;
+    }
+
+    if (block is DocumentNode) {
+      buffer.write(_serializeDocument(block));
+      return;
+    }
+
     final tag = block.tag;
     final attributes = <String, String>{};
     final styles = _buildBlockStyle(block);
@@ -319,6 +334,156 @@ class SmartHtmlSerializer {
         .map((e) => ' ${e.key}="${_escapeAttr(e.value)}"')
         .join('');
     return '<img$attrString />';
+  }
+
+  /// Serializes a [VideoNode] into `<video>` HTML.
+  String _serializeVideo(VideoNode vid) {
+    final attributes = <String, String>{
+      'src': vid.src,
+    };
+    if (vid.controls) {
+      attributes['controls'] = 'controls';
+    }
+    if (vid.poster != null && vid.poster!.isNotEmpty) {
+      attributes['poster'] = vid.poster!;
+    }
+    if (vid.caption != null && vid.caption!.isNotEmpty) {
+      attributes['data-caption'] = vid.caption!;
+      attributes['title'] = vid.caption!;
+    }
+    if (vid.width != null) {
+      attributes['width'] = vid.width!.toInt().toString();
+    }
+    if (vid.height != null) {
+      attributes['height'] = vid.height!.toInt().toString();
+    }
+
+    final styles = <String, String>{};
+    if (vid.alignment == SmartTextAlign.center) {
+      styles['display'] = 'block';
+      styles['margin-left'] = 'auto';
+      styles['margin-right'] = 'auto';
+    } else if (vid.alignment == SmartTextAlign.right) {
+      styles['display'] = 'block';
+      styles['margin-left'] = 'auto';
+      styles['margin-right'] = '0';
+    } else if (vid.alignment == SmartTextAlign.left) {
+      styles['display'] = 'block';
+      styles['margin-right'] = 'auto';
+    }
+
+    final custom = onTagSerialize?.call(
+      SmartTagType.video,
+      'video',
+      attributes,
+      styles,
+      '',
+    );
+    if (custom != null) return custom;
+
+    if (styles.isNotEmpty) {
+      attributes['style'] =
+          styles.entries.map((e) => '${e.key}: ${e.value}').join('; ');
+    }
+
+    final attrString = attributes.entries
+        .map((e) => ' ${e.key}="${_escapeAttr(e.value)}"')
+        .join('');
+    return '<video$attrString></video>';
+  }
+
+  /// Serializes an [AudioNode] into `<audio>` HTML.
+  String _serializeAudio(AudioNode aud) {
+    final attributes = <String, String>{
+      'src': aud.src,
+    };
+    if (aud.controls) {
+      attributes['controls'] = 'controls';
+    }
+    if (aud.title != null && aud.title!.isNotEmpty) {
+      attributes['data-title'] = aud.title!;
+      attributes['title'] = aud.title!;
+    }
+    if (aud.author != null && aud.author!.isNotEmpty) {
+      attributes['data-author'] = aud.author!;
+    }
+
+    final styles = <String, String>{};
+    if (aud.alignment == SmartTextAlign.center) {
+      styles['display'] = 'block';
+      styles['margin-left'] = 'auto';
+      styles['margin-right'] = 'auto';
+    } else if (aud.alignment == SmartTextAlign.right) {
+      styles['display'] = 'block';
+      styles['margin-left'] = 'auto';
+      styles['margin-right'] = '0';
+    } else if (aud.alignment == SmartTextAlign.left) {
+      styles['display'] = 'block';
+      styles['margin-right'] = 'auto';
+    }
+
+    final custom = onTagSerialize?.call(
+      SmartTagType.audio,
+      'audio',
+      attributes,
+      styles,
+      '',
+    );
+    if (custom != null) return custom;
+
+    if (styles.isNotEmpty) {
+      attributes['style'] =
+          styles.entries.map((e) => '${e.key}: ${e.value}').join('; ');
+    }
+
+    final attrString = attributes.entries
+        .map((e) => ' ${e.key}="${_escapeAttr(e.value)}"')
+        .join('');
+    return '<audio$attrString></audio>';
+  }
+
+  /// Serializes a [DocumentNode] into `<a>` HTML with attachment metadata.
+  String _serializeDocument(DocumentNode doc) {
+    final attributes = <String, String>{
+      'href': doc.src,
+      'download': doc.fileName,
+      'class': 'smart-attachment-file',
+      'data-attachment': 'document',
+    };
+    if (doc.fileSize != null) {
+      attributes['data-file-size'] = doc.fileSize.toString();
+    }
+    if (doc.fileExtension != null && doc.fileExtension!.isNotEmpty) {
+      attributes['data-file-extension'] = doc.fileExtension!;
+    }
+
+    final styles = <String, String>{};
+    if (doc.alignment == SmartTextAlign.center) {
+      styles['display'] = 'block';
+      styles['text-align'] = 'center';
+    } else if (doc.alignment == SmartTextAlign.right) {
+      styles['display'] = 'block';
+      styles['text-align'] = 'right';
+    }
+
+    final custom = onTagSerialize?.call(
+      SmartTagType.document,
+      'a',
+      attributes,
+      styles,
+      doc.fileName,
+    );
+    if (custom != null) return custom;
+
+    if (styles.isNotEmpty) {
+      attributes['style'] =
+          styles.entries.map((e) => '${e.key}: ${e.value}').join('; ');
+    }
+
+    final attrString = attributes.entries
+        .map((e) => ' ${e.key}="${_escapeAttr(e.value)}"')
+        .join('');
+    return '<a$attrString>${_escapeHtml(doc.fileName)}</a>';
   }
 
   /// Helper to wrap content in a tag, allowing for external interception.

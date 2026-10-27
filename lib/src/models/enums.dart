@@ -50,6 +50,10 @@ enum SmartButtonType {
   horizontalRule,
   insertLink,
   insertImage,
+  insertAttachment,
+  insertVideo,
+  insertAudio,
+  insertOtherFile,
   findReplace,
 
   // Table operations
@@ -63,6 +67,14 @@ enum SmartButtonType {
   addColumnRight,
   deleteColumn,
   deleteTable,
+}
+
+/// Available attachment types for the unified attachment picker.
+enum SmartAttachmentType {
+  image,
+  video,
+  audio,
+  document,
 }
 
 /// Identifies a toolbar dropdown type (used in onDropdownChanged callback)
@@ -90,6 +102,9 @@ enum BlockType {
   horizontalRule,
   table,
   image,
+  video,
+  audio,
+  document,
 }
 
 /// The type of list for a list item
@@ -218,4 +233,13 @@ enum SmartTagType {
 
   /// An image block (<img>)
   image,
+
+  /// A video block (<video>)
+  video,
+
+  /// An audio block (<audio>)
+  audio,
+
+  /// A document/attachment block (<a>)
+  document,
 }
