@@ -6,7 +6,21 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
 
 `flutter_smart_editor` is a full-featured WYSIWYG editor designed from scratch to eliminate the overhead and bugs associated with WebView-based editors. It provides a premium, Material 3 experience with clean HTML input/output.
 
-<img width="3200" height="2000" alt="svgviewer-png-output (1)" src="https://github.com/user-attachments/assets/6400a5e5-80d5-475c-86d0-aecc6a3cab51" />
+> ⭐️ **Enjoying Flutter Smart Editor?** Please consider giving it a like on [pub.dev](https://pub.dev/packages/flutter_smart_editor) and starring the repository on [GitHub](https://github.com/Zeeshan-progs/flutter_smart_editor)!
+>
+> 🤝 **Want to contribute?** We welcome all collaborations, bug reports, and feature requests. Feel free to open an issue or submit a pull request on [GitHub](https://github.com/Zeeshan-progs/flutter_smart_editor).
+
+## 📸 Showcase
+
+| Light Mode Editor | Dark Mode & Rich Formatting |
+| :---: | :---: |
+| ![Light Mode Editor](screenshots/se_light_mode.png) | ![Dark Mode Formatting](screenshots/se_text_style_dark_mode.png) |
+| **Material 3 Toolbars** | **Multi-Media Attachments** |
+| ![Material 3 Toolbars](screenshots/se_toolbars.png) | ![Multi-Media Attachments](screenshots/se_attachments.png) |
+| **Floating Find & Replace** | **Interactive Hyperlinks** |
+| ![Floating Find and Replace](screenshots/se_find_replace.png) | ![Interactive Hyperlinks](screenshots/se_link_preview.png) |
+| **Rich Text Styling (Light)** | **Pure Dart Architecture** |
+| ![Rich Text Styling Light](screenshots/se_text_style_light_mode.png) | ![Pure Dart Architecture](screenshots/se_pure_dart.png) |
 
 ## 📌 Table of Contents
 
@@ -14,6 +28,8 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
 - [✨ Features](#-features)
 - [🚀 Getting Started](#-getting-started)
 - [📖 Basic Usage](#-basic-usage)
+- [🎛️ Toolbar Customization](#️-toolbar-customization)
+- [🏃 Migration Guide](#-migration-guide-v10x--v200)
 - [⚙️ Detailed Configuration](#️-detailed-configuration)
   - [1. SmartEditorSettings](#1-smarteditorsettings)
     - [Core & HTML](#core--html)
@@ -34,14 +50,12 @@ A highly customizable, **pure Dart and Flutter** rich text HTML editor. No WebVi
     - [Enabling the Bullet Picker](#enabling-the-bullet-picker)
     - [Customizing Available Styles](#customizing-available-styles)
     - [Custom Serialization Example](#custom-serialization-example)
-  - [4. Programmatic APIs (Tables, Lists, Hyperlinks, Search & Media Attachments)](#4-programmatic-apis-tables-lists-hyperlinks-search--media-attachments)
+  - [4. Programmatic APIs](#4-programmatic-apis-tables-lists-hyperlinks-search--media-attachments)
     - [Table Management APIs](#-table-management-apis)
     - [List & Numbered List APIs](#-list--numbered-list-apis)
     - [Hyperlink Management APIs](#-hyperlink-management-apis)
     - [Find & Replace APIs](#-find--replace-apis)
     - [Media & Attachment APIs](#️-media--attachment-apis-images-video-audio--documents)
-- [🎛️ Toolbar Customization](#️-toolbar-customization)
-- [🏃 Migration Guide](#-migration-guide-v10x--v200)
 - [🛠️ Upcoming Features](#️-upcoming-features)
 - [❓ Troubleshooting](#-troubleshooting)
 - [📄 License](#-license)
@@ -110,6 +124,147 @@ SmartEditor(
   ),
   toolbarSettings: const SmartToolbarSettings(
     toolbarType: SmartToolbarType.scrollable,
+  ),
+)
+```
+
+---
+
+## 🎛️ Toolbar Customization
+
+The toolbar is built using modular button groups. You can fully customize which groups appear and which specific buttons within those groups are active.
+
+### Full Toolbar Example
+
+Here is how you would configure a toolbar with **every available group** active:
+
+```dart
+SmartToolbarSettings(
+  toolbarType: SmartToolbarType.expandable,
+  defaultButtons: [
+    const SmartStyleButtons(),      // Heading 1-6 & Paragraph
+    const SmartFontButtons(
+      strikethrough: true,
+      fontSize: true,
+      clearAll: true,
+    ),
+    const SmartColorButtons(
+      foregroundColor: true,
+      highlightColor: true,
+    ),
+    const SmartListButtons(
+      ul: true,
+      ol: true,
+      hr: true,
+      listStyles: true,             // Enables interactive bullet picker
+    ),
+    const SmartFontFamilyButtons(),
+    const SmartParagraphButtons(),    // Alignment: Left, Center, Right, Justify
+    const SmartOtherButtons(
+      undo: true,
+      redo: true,
+      copy: true,
+      paste: true,
+    ),
+  ],
+)
+```
+
+### Breakdown of Button Groups
+
+| Group Class | Description |
+| --- | --- |
+| `SmartStyleButtons` | Controls the paragraph style dropdown (Heading 1 to Heading 6 and Normal text). |
+| `SmartFontButtons` | Standard formatting: Bold, Italic, Underline, Strikethrough, Font Size, and Clear Formatting. |
+| `SmartColorButtons` | Integrated color pickers for text color and background highlight color. |
+| `SmartFontFamilyButtons` | A dropdown for selecting from your application's available font families. |
+| `SmartListButtons` | Bullet/Numbered list toggles, horizontal dividers (HR), and the premium Bullet Style Picker. |
+| `SmartParagraphButtons` | Text alignment controls: Left, Center, Right, and Full Justify. |
+| `SmartInsertButtons` | Insert elements: Hyperlinks (`link: true`), Multi-Media Attachments (`attachment: true` for images, video, audio, documents), and HTML Tables (`table: true`). |
+| `SmartOtherButtons` | Utility actions: Undo, Redo, Copy to Clipboard, Paste, and Find & Replace (`findReplace: true`). |
+
+---
+
+### 2. `SmartToolbarSettings`
+
+#### Layout & Position
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `toolbarType` | `SmartToolbarType` | `.scrollable` | Layout: `.scrollable`, `.grid`, or enhanced `.expandable` (single toolbar with smooth toggle between scroll and multi-line wrap). |
+| `toolbarPosition` | `SmartToolbarPosition` | `.above` | Position relative to editor: `.above` or `.below`. |
+| `initiallyExpanded` | `bool` | `false` | Starts the expandable toolbar in the open state. |
+| `showBorder` | `bool` | `false` | Separation border between editor and toolbar. |
+| `showSeparators` | `bool` | `true` | Vertical lines between button groups. |
+| `itemHeight` | `double` | `36` | Height of individual buttons and chips. |
+| `gridSpacingH` | `double` | `5` | Horizontal gap between buttons in grid layout. |
+| `gridSpacingV` | `double` | `5` | Vertical gap between buttons in grid layout. |
+| `separatorWidget` | `Widget?` | `null` | Custom widget to use as a separator. |
+
+#### Content
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `defaultButtons` | `List<SmartToolbarGroup>` | `[...]` | List of button groups to display. |
+| `customButtons` | `List<Widget>` | `[]` | Custom widgets to insert into the toolbar. |
+| `customButtonInsertionIndices` | `List<int>` | `[]` | Position indices for custom buttons. |
+
+#### Container Styling
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `decoration` | `BoxDecoration?` | `null` | Styling for the toolbar background/border. |
+| `padding` | `EdgeInsets?` | `null` | Internal padding of the toolbar container. |
+
+#### Button & Text Styling
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `buttonColor` | `Color?` | `null` | Base color for toolbar icons. |
+| `buttonSelectedColor` | `Color?` | `null` | Icon color when a style is active. |
+| `buttonFillColor` | `Color?` | `null` | Background color of the button. |
+| `buttonBorderRadius` | `BorderRadius?` | `null` | Corner rounding for buttons. |
+| `buttonIconSize` | `double` | `20.0` | Size of the toolbar icons. |
+| `textStyle` | `TextStyle?` | `null` | Style for text labels in the toolbar. |
+
+#### Dropdown Styling
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dropdownBackgroundColor` | `Color?` | `null` | Background color of popup menus. |
+| `dropdownElevation` | `int` | `8` | Shadow depth for popup menus. |
+| `dropdownItemHeight` | `double?` | `null` | Height of items inside dropdowns. |
+| `dropdownIconSize` | `double` | `24` | Size of the dropdown arrow icon. |
+
+#### Interceptors
+
+| Callback | Signature | Description |
+| --- | --- | --- |
+| `onButtonPressed` | `(Type, bool, Fn)` | Intercept any button click to add custom logic. |
+| `onDropdownChanged` | `(Type, val, Fn)` | Intercept any dropdown selection change. |
+
+---
+
+## 🏃 Migration Guide (v1.0.x ➔ v2.x.x)
+
+Version 2.x.x introduces a **Unified Settings API**. Instead of separate `ScrollSettings`, `KeyboardSettings`, etc., all editor-related properties are now in `SmartEditorSettings`.
+
+**Old:**
+
+```dart
+SmartEditor(
+  scrollSettings: SmartScrollSettings(autoAdjustHeight: true),
+  styleSettings: SmartStyleSettings(editorPadding: EdgeInsets.all(16)),
+)
+```
+
+**New:**
+
+```dart
+SmartEditor(
+  editorSettings: SmartEditorSettings(
+    autoAdjustHeight: true,
+    editorPadding: EdgeInsets.all(16),
   ),
 )
 ```
@@ -631,145 +786,6 @@ dependencies:
 ```
 
 ---
-
-## 🎛️ Toolbar Customization
-
-The toolbar is built using modular button groups. You can fully customize which groups appear and which specific buttons within those groups are active.
-
-### Full Toolbar Example
-
-Here is how you would configure a toolbar with **every available group** active:
-
-```dart
-SmartToolbarSettings(
-  toolbarType: SmartToolbarType.expandable,
-  defaultButtons: [
-    const SmartStyleButtons(),      // Heading 1-6 & Paragraph
-    const SmartFontButtons(
-      strikethrough: true,
-      fontSize: true,
-      clearAll: true,
-    ),
-    const SmartColorButtons(
-      foregroundColor: true,
-      highlightColor: true,
-    ),
-    const SmartListButtons(
-      ul: true,
-      ol: true,
-      hr: true,
-      listStyles: true,             // Enables interactive bullet picker
-    ),
-    const SmartFontFamilyButtons(),
-    const SmartParagraphButtons(),    // Alignment: Left, Center, Right, Justify
-    const SmartOtherButtons(
-      undo: true,
-      redo: true,
-      copy: true,
-      paste: true,
-    ),
-  ],
-)
-```
-
-### Breakdown of Button Groups
-
-| Group Class | Description |
-| --- | --- |
-| `SmartStyleButtons` | Controls the paragraph style dropdown (Heading 1 to Heading 6 and Normal text). |
-| `SmartFontButtons` | Standard formatting: Bold, Italic, Underline, Strikethrough, Font Size, and Clear Formatting. |
-| `SmartColorButtons` | Integrated color pickers for text color and background highlight color. |
-| `SmartFontFamilyButtons` | A dropdown for selecting from your application's available font families. |
-| `SmartListButtons` | Bullet/Numbered list toggles, horizontal dividers (HR), and the premium Bullet Style Picker. |
-| `SmartParagraphButtons` | Text alignment controls: Left, Center, Right, and Full Justify. |
-| `SmartInsertButtons` | Insert elements: Hyperlinks (`link: true`), Multi-Media Attachments (`attachment: true` for images, video, audio, documents), and HTML Tables (`table: true`). |
-| `SmartOtherButtons` | Utility actions: Undo, Redo, Copy to Clipboard, Paste, and Find & Replace (`findReplace: true`). |
-
----
-
-### 2. `SmartToolbarSettings`
-
-#### Layout & Position
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `toolbarType` | `SmartToolbarType` | `.scrollable` | Layout: `.scrollable`, `.grid`, or enhanced `.expandable` (single toolbar with smooth toggle between scroll and multi-line wrap). |
-| `toolbarPosition` | `SmartToolbarPosition` | `.above` | Position relative to editor: `.above` or `.below`. |
-| `initiallyExpanded` | `bool` | `false` | Starts the expandable toolbar in the open state. |
-| `showBorder` | `bool` | `false` | Separation border between editor and toolbar. |
-| `showSeparators` | `bool` | `true` | Vertical lines between button groups. |
-| `itemHeight` | `double` | `36` | Height of individual buttons and chips. |
-| `gridSpacingH` | `double` | `5` | Horizontal gap between buttons in grid layout. |
-| `gridSpacingV` | `double` | `5` | Vertical gap between buttons in grid layout. |
-| `separatorWidget` | `Widget?` | `null` | Custom widget to use as a separator. |
-
-#### Content
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `defaultButtons` | `List<SmartToolbarGroup>` | `[...]` | List of button groups to display. |
-| `customButtons` | `List<Widget>` | `[]` | Custom widgets to insert into the toolbar. |
-| `customButtonInsertionIndices` | `List<int>` | `[]` | Position indices for custom buttons. |
-
-#### Container Styling
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `decoration` | `BoxDecoration?` | `null` | Styling for the toolbar background/border. |
-| `padding` | `EdgeInsets?` | `null` | Internal padding of the toolbar container. |
-
-#### Button & Text Styling
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `buttonColor` | `Color?` | `null` | Base color for toolbar icons. |
-| `buttonSelectedColor` | `Color?` | `null` | Icon color when a style is active. |
-| `buttonFillColor` | `Color?` | `null` | Background color of the button. |
-| `buttonBorderRadius` | `BorderRadius?` | `null` | Corner rounding for buttons. |
-| `buttonIconSize` | `double` | `20.0` | Size of the toolbar icons. |
-| `textStyle` | `TextStyle?` | `null` | Style for text labels in the toolbar. |
-
-#### Dropdown Styling
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `dropdownBackgroundColor` | `Color?` | `null` | Background color of popup menus. |
-| `dropdownElevation` | `int` | `8` | Shadow depth for popup menus. |
-| `dropdownItemHeight` | `double?` | `null` | Height of items inside dropdowns. |
-| `dropdownIconSize` | `double` | `24` | Size of the dropdown arrow icon. |
-
-#### Interceptors
-
-| Callback | Signature | Description |
-| --- | --- | --- |
-| `onButtonPressed` | `(Type, bool, Fn)` | Intercept any button click to add custom logic. |
-| `onDropdownChanged` | `(Type, val, Fn)` | Intercept any dropdown selection change. |
-
----
-
-## 🏃 Migration Guide (v1.0.x ➔ v2.x.x)
-
-Version 2.x.x introduces a **Unified Settings API**. Instead of separate `ScrollSettings`, `KeyboardSettings`, etc., all editor-related properties are now in `SmartEditorSettings`.
-
-**Old:**
-
-```dart
-SmartEditor(
-  scrollSettings: SmartScrollSettings(autoAdjustHeight: true),
-  styleSettings: SmartStyleSettings(editorPadding: EdgeInsets.all(16)),
-)
-```
-
-**New:**
-
-```dart
-SmartEditor(
-  editorSettings: SmartEditorSettings(
-    autoAdjustHeight: true,
-    editorPadding: EdgeInsets.all(16),
-  ),
-)
-```
 
 ## 🛠️ Upcoming Features
 
