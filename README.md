@@ -71,7 +71,7 @@ Most rich text editors for Flutter rely heavily on hidden WebViews and JavaScrip
 **Flutter Smart Editor** is engineered **100% in pure Dart and Flutter**:
 
 - ⚡ **Zero WebViews & Zero JavaScript**: Rendered and laid out completely through Flutter's native widget and render object tree for 60/120 FPS fluidity.
-- 🎨 **Deep Flutter Customization**: Use your own Flutter widgets for audio blocks, video blocks, custom attachments, dialogs, and toolbar buttons.
+- 🛠️ **Complete Freedom & Total Customization**: Gives you a complete free hand to use it exactly as you want. You can fully customize anything—from toolbar layouts, button groups, and color schemes to custom block builders (audio, video, document attachments), dialogs, and event callbacks.
 - 📱 **Native Performance & Fluidity**: Natural touch gestures, seamless platform scrolling, and rock-solid platform IME text editing.
 - 📄 **Clean HTML In & Out**: Robust internal HTML parser and serializer producing clean, semantic HTML without proprietary bloat.
 
