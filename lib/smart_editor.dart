@@ -178,12 +178,18 @@ class _SmartEditorState extends State<SmartEditor> {
 
     final editorWidget = Flexible(
       fit: FlexFit.loose,
-      child: SmartEditorWidget(
-        key: _editorKey,
-        documentController: widget.controller.documentController,
-        controller: widget.controller,
-        editorSettings: widget.editorSettings,
-        onFormatStateChanged: _onFormatStateChanged,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: effectiveMinHeight,
+          maxHeight: effectiveMaxHeight ?? double.infinity,
+        ),
+        child: SmartEditorWidget(
+          key: _editorKey,
+          documentController: widget.controller.documentController,
+          controller: widget.controller,
+          editorSettings: widget.editorSettings,
+          onFormatStateChanged: _onFormatStateChanged,
+        ),
       ),
     );
 
@@ -239,10 +245,6 @@ class _SmartEditorState extends State<SmartEditor> {
     }
 
     return Container(
-      constraints: BoxConstraints(
-        minHeight: effectiveMinHeight,
-        maxHeight: effectiveMaxHeight ?? double.infinity,
-      ),
       decoration: widget.editorSettings.decoration ?? defaultDecoration,
       clipBehavior: Clip.antiAlias,
       child: content,

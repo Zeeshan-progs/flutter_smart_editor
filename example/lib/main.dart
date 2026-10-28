@@ -84,10 +84,18 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
                 onBlur: () {
                   developer.log('Editor blurred', name: 'SmartEditor');
                 },
+                audioBuilder: (context, node) {
+                  // Add your custom audio player widget here
+                  return Text("Audio Node: ${node.src}");
+                },
+                videoBuilder: (context, node) {
+                  // Add your custom video player widget here
+                  return Text("Video Node: ${node.src}");
+                },
               ),
               toolbarSettings: const SmartToolbarSettings(
                 toolbarPosition: SmartToolbarPosition.above,
-                toolbarType: SmartToolbarType.scrollable,
+                toolbarType: SmartToolbarType.expandable,
                 showBorder: true,
                 defaultButtons: [
                   SmartStyleButtons(),
@@ -110,7 +118,11 @@ class _EditorDemoPageState extends State<EditorDemoPage> {
                     paste: true,
                     findReplace: true,
                   ),
-                  SmartInsertButtons(table: true, link: true),
+                  SmartInsertButtons(
+                    table: true,
+                    link: true,
+                    attachment: true,
+                  ),
                 ],
               ),
             ),

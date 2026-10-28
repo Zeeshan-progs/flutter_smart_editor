@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'enums.dart';
+import 'nodes/audio_node_model.dart';
+import 'nodes/video_node_model.dart';
 
 /// Comprehensive settings for the editor's behavior, style, and events.
 ///
@@ -78,6 +80,10 @@ class SmartEditorSettings {
     this.enableFindReplace = true,
     this.searchMatchColor,
     this.searchActiveMatchColor,
+
+    // Media & Attachment Builders
+    this.audioBuilder,
+    this.videoBuilder,
   });
 
   // ─── Core & HTML ──────────────────────────────────────────────
@@ -224,13 +230,12 @@ class SmartEditorSettings {
   /// Custom tag serialization callback.
   /// Allows users to intercept and modify any HTML tag before it's written.
   final String? Function(
-          SmartTagType type,
-          String tag,
-          Map<String, String> attributes,
-          Map<String, String> styles,
-          String content)?
-      onTagSerialize;
-  
+      SmartTagType type,
+      String tag,
+      Map<String, String> attributes,
+      Map<String, String> styles,
+      String content)? onTagSerialize;
+
   /// Called when a hyperlink is tapped in the editor.
   final void Function(String url)? onLinkTapped;
 
@@ -269,6 +274,12 @@ class SmartEditorSettings {
   /// Custom background highlight color for the active search match.
   /// If null, a theme-appropriate color is automatically used.
   final Color? searchActiveMatchColor;
+
+  /// Optional builder to customize how audio blocks are rendered.
+  final AudioNodeBuilder? audioBuilder;
+
+  /// Optional builder to customize how video blocks are rendered.
+  final VideoNodeBuilder? videoBuilder;
 }
 
 /// Styling configuration for the `<hr>` horizontal rule block.

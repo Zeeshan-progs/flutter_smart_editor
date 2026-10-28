@@ -7,6 +7,7 @@ import 'src/core/infra/html_serializer.dart';
 import 'src/core/document/undo_redo_manager.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'src/models/enums.dart';
+import 'src/models/attachment_data.dart';
 import 'src/models/search/search_index.dart';
 import 'src/widgets/editor/smart_editor_widget.dart';
 import 'src/widgets/toolbar/smart_toolbar_widget.dart';
@@ -960,6 +961,186 @@ class SmartEditorController extends ChangeNotifier {
   /// Gets the [ImageNode] at [blockIndex], or null if not an image.
   ImageNode? getImageNode(int blockIndex) {
     return _documentController.getImageNode(blockIndex);
+  }
+
+  // ─── Media & Attachment Delegates ─────────────────────────────
+
+  /// Delegate function to pick a video file from device.
+  Future<SmartAttachmentData?> Function()? videoPickerDelegate;
+
+  /// Delegate function to pick an audio file from device.
+  Future<SmartAttachmentData?> Function()? audioPickerDelegate;
+
+  /// Delegate function to pick a document/file from device.
+  Future<SmartAttachmentData?> Function()? filePickerDelegate;
+
+  /// Unified attachment delegate callback that handles any [SmartAttachmentType].
+  Future<SmartAttachmentData?> Function(SmartAttachmentType type)?
+      attachmentPickerDelegate;
+
+  // ─── Video Operations ──────────────────────────────────────────
+
+  /// Inserts a video block at or after [blockIndex].
+  int insertVideo({
+    required String src,
+    String? caption,
+    double? width,
+    double? height,
+    String? poster,
+    SmartTextAlign alignment = SmartTextAlign.center,
+    int? blockIndex,
+  }) {
+    final targetIndex = blockIndex ?? _editorWidgetState?.focusedBlockIndex;
+    final index = _documentController.insertVideo(
+      src: src,
+      caption: caption,
+      width: width,
+      height: height,
+      poster: poster,
+      alignment: alignment,
+      blockIndex: targetIndex,
+    );
+    _editorWidgetState?.rebuild();
+    return index;
+  }
+
+  /// Updates properties on an existing video block at [blockIndex].
+  void updateVideo(
+    int blockIndex, {
+    String? src,
+    String? caption,
+    double? width,
+    double? height,
+    String? poster,
+    SmartTextAlign? alignment,
+  }) {
+    _documentController.updateVideo(
+      blockIndex,
+      src: src,
+      caption: caption,
+      width: width,
+      height: height,
+      poster: poster,
+      alignment: alignment,
+    );
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Removes a video block at [blockIndex].
+  void removeVideo(int blockIndex) {
+    _documentController.removeVideo(blockIndex);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Gets the [VideoNode] at [blockIndex], or null if not a video.
+  VideoNode? getVideoNode(int blockIndex) {
+    return _documentController.getVideoNode(blockIndex);
+  }
+
+  // ─── Audio Operations ──────────────────────────────────────────
+
+  /// Inserts an audio block at or after [blockIndex].
+  int insertAudio({
+    required String src,
+    String? title,
+    String? author,
+    SmartTextAlign alignment = SmartTextAlign.left,
+    int? blockIndex,
+  }) {
+    final targetIndex = blockIndex ?? _editorWidgetState?.focusedBlockIndex;
+    final index = _documentController.insertAudio(
+      src: src,
+      title: title,
+      author: author,
+      alignment: alignment,
+      blockIndex: targetIndex,
+    );
+    _editorWidgetState?.rebuild();
+    return index;
+  }
+
+  /// Updates properties on an existing audio block at [blockIndex].
+  void updateAudio(
+    int blockIndex, {
+    String? src,
+    String? title,
+    String? author,
+    SmartTextAlign? alignment,
+  }) {
+    _documentController.updateAudio(
+      blockIndex,
+      src: src,
+      title: title,
+      author: author,
+      alignment: alignment,
+    );
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Removes an audio block at [blockIndex].
+  void removeAudio(int blockIndex) {
+    _documentController.removeAudio(blockIndex);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Gets the [AudioNode] at [blockIndex], or null if not an audio block.
+  AudioNode? getAudioNode(int blockIndex) {
+    return _documentController.getAudioNode(blockIndex);
+  }
+
+  // ─── Document Operations ───────────────────────────────────────
+
+  /// Inserts a document file block at or after [blockIndex].
+  int insertDocument({
+    required String src,
+    required String fileName,
+    int? fileSize,
+    String? fileExtension,
+    SmartTextAlign alignment = SmartTextAlign.left,
+    int? blockIndex,
+  }) {
+    final targetIndex = blockIndex ?? _editorWidgetState?.focusedBlockIndex;
+    final index = _documentController.insertDocument(
+      src: src,
+      fileName: fileName,
+      fileSize: fileSize,
+      fileExtension: fileExtension,
+      alignment: alignment,
+      blockIndex: targetIndex,
+    );
+    _editorWidgetState?.rebuild();
+    return index;
+  }
+
+  /// Updates properties on an existing document block at [blockIndex].
+  void updateDocument(
+    int blockIndex, {
+    String? src,
+    String? fileName,
+    int? fileSize,
+    String? fileExtension,
+    SmartTextAlign? alignment,
+  }) {
+    _documentController.updateDocument(
+      blockIndex,
+      src: src,
+      fileName: fileName,
+      fileSize: fileSize,
+      fileExtension: fileExtension,
+      alignment: alignment,
+    );
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Removes a document block at [blockIndex].
+  void removeDocument(int blockIndex) {
+    _documentController.removeDocument(blockIndex);
+    _editorWidgetState?.rebuild();
+  }
+
+  /// Gets the [DocumentNode] at [blockIndex], or null if not a document block.
+  DocumentNode? getDocumentNode(int blockIndex) {
+    return _documentController.getDocumentNode(blockIndex);
   }
 }
 

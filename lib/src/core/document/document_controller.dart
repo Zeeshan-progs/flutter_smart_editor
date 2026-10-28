@@ -5,6 +5,7 @@ export 'controllers/formatting_document_controller.dart';
 export 'controllers/list_document_controller.dart';
 export 'controllers/table_document_controller.dart';
 export 'controllers/image_document_controller.dart';
+export 'controllers/attachment_document_controller.dart';
 export 'controllers/search_document_controller.dart';
 
 import 'controllers/search_document_controller.dart';

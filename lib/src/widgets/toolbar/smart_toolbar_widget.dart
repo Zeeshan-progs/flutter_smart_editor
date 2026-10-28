@@ -16,7 +16,9 @@ import 'groups/color_button_group.dart';
 import 'groups/table_button_group.dart';
 import 'groups/insert_button_group.dart';
 import 'inputs/link_dialog.dart';
-import '../dialogs/image_import_dialog.dart';
+import '../../models/attachment_data.dart';
+import '../dialogs/attachment_bottom_sheet.dart';
+import '../dialogs/smart_attachment_dialog.dart';
 import '../cropper/smart_image_cropper.dart';
 
 /// A premium Material 3 toolbar for the flutter smart editor.
@@ -374,6 +376,26 @@ class SmartToolbarState extends State<SmartToolbar> {
       return;
     }
 
+    if (type == SmartButtonType.insertAttachment) {
+      _showAttachmentOptions();
+      return;
+    }
+
+    if (type == SmartButtonType.insertVideo) {
+      _showVideoDialog();
+      return;
+    }
+
+    if (type == SmartButtonType.insertAudio) {
+      _showAudioDialog();
+      return;
+    }
+
+    if (type == SmartButtonType.insertOtherFile) {
+      _showDocumentDialog();
+      return;
+    }
+
     if (type == SmartButtonType.findReplace) {
       if (widget.controller.searchState.isBarVisible) {
         widget.controller.hideFindReplace();
@@ -530,24 +552,31 @@ class SmartToolbarState extends State<SmartToolbar> {
   }
 
   void _showImageDialog() {
-    ImageImportDialog.show(
+    SmartAttachmentDialog.show(
       context,
+      type: SmartAttachmentType.image,
       isDarkMode: widget.isDarkMode,
-      onPickFromDevice: widget.controller.imagePickerDelegate,
+      onPickFromDevice: widget.controller.imagePickerDelegate != null
+          ? () async {
+              final picked = await widget.controller.imagePickerDelegate!();
+              if (picked == null) return null;
+              return SmartAttachmentData(
+                src: picked,
+                type: SmartAttachmentType.image,
+              );
+            }
+          : (widget.controller.attachmentPickerDelegate != null
+              ? () => widget.controller
+                  .attachmentPickerDelegate!(SmartAttachmentType.image)
+              : null),
     ).then((result) async {
-      if (result != null) {
-        final initialSrc = result['src'] as String?;
-        if (initialSrc == null || initialSrc.isEmpty) {
-          _finishToolbarAction();
-          return;
-        }
-
-        String finalSrc = initialSrc;
-        if (result['action'] == 'crop') {
+      if (result != null && result.src.isNotEmpty) {
+        String finalSrc = result.src;
+        if (result.shouldCrop) {
           if (!mounted) return;
           final cropped = await SmartImageCropper.show(
             context,
-            imageSrc: initialSrc,
+            imageSrc: result.src,
             isDarkMode: widget.isDarkMode,
           );
           if (cropped == null || cropped.isEmpty) {
@@ -560,8 +589,142 @@ class SmartToolbarState extends State<SmartToolbar> {
         final (blockIndex, _) = _getEffectiveSelection();
         widget.controller.insertImage(
           src: finalSrc,
-          alt: result['alt'] as String?,
-          caption: result['caption'] as String?,
+          alt: result.alt,
+          caption: result.caption,
+          blockIndex: blockIndex,
+        );
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+    });
+  }
+
+  SmartInsertButtons? get _insertButtonsConfig {
+    for (final group in widget.settings.defaultButtons) {
+      if (group is SmartInsertButtons) return group;
+    }
+    return null;
+  }
+
+  void _showAttachmentOptions() {
+    final config = _insertButtonsConfig;
+    final enabledTypes = config?.enabledAttachments ??
+        {
+          SmartAttachmentType.image,
+          SmartAttachmentType.video,
+          SmartAttachmentType.audio,
+          SmartAttachmentType.document,
+        };
+
+    if (enabledTypes.isEmpty) {
+      _finishToolbarAction();
+      return;
+    }
+
+    if (enabledTypes.length == 1) {
+      _openSpecificAttachmentDialog(enabledTypes.first);
+      return;
+    }
+
+    SmartAttachmentBottomSheet.show(
+      context,
+      enabledAttachments: enabledTypes,
+      isDarkMode: widget.isDarkMode,
+    ).then((chosenType) {
+      if (chosenType != null && mounted) {
+        _openSpecificAttachmentDialog(chosenType);
+      } else {
+        _finishToolbarAction();
+      }
+    });
+  }
+
+  void _openSpecificAttachmentDialog(SmartAttachmentType type) {
+    switch (type) {
+      case SmartAttachmentType.image:
+        _showImageDialog();
+        break;
+      case SmartAttachmentType.video:
+        _showVideoDialog();
+        break;
+      case SmartAttachmentType.audio:
+        _showAudioDialog();
+        break;
+      case SmartAttachmentType.document:
+        _showDocumentDialog();
+        break;
+    }
+  }
+
+  void _showVideoDialog() {
+    SmartAttachmentDialog.show(
+      context,
+      type: SmartAttachmentType.video,
+      isDarkMode: widget.isDarkMode,
+      onPickFromDevice: widget.controller.videoPickerDelegate ??
+          (widget.controller.attachmentPickerDelegate != null
+              ? () => widget.controller
+                  .attachmentPickerDelegate!(SmartAttachmentType.video)
+              : null),
+    ).then((data) {
+      if (data != null && data.src.isNotEmpty) {
+        final (blockIndex, _) = _getEffectiveSelection();
+        widget.controller.insertVideo(
+          src: data.src,
+          caption: data.caption ?? data.name,
+          blockIndex: blockIndex,
+        );
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+    });
+  }
+
+  void _showAudioDialog() {
+    SmartAttachmentDialog.show(
+      context,
+      type: SmartAttachmentType.audio,
+      isDarkMode: widget.isDarkMode,
+      onPickFromDevice: widget.controller.audioPickerDelegate ??
+          (widget.controller.attachmentPickerDelegate != null
+              ? () => widget.controller
+                  .attachmentPickerDelegate!(SmartAttachmentType.audio)
+              : null),
+    ).then((data) {
+      if (data != null && data.src.isNotEmpty) {
+        final (blockIndex, _) = _getEffectiveSelection();
+        widget.controller.insertAudio(
+          src: data.src,
+          title: data.name ?? data.caption,
+          blockIndex: blockIndex,
+        );
+        widget.onFormatApplied?.call();
+        _syncToolbarAfterDocumentChange();
+      }
+      _finishToolbarAction();
+    });
+  }
+
+  void _showDocumentDialog() {
+    SmartAttachmentDialog.show(
+      context,
+      type: SmartAttachmentType.document,
+      isDarkMode: widget.isDarkMode,
+      onPickFromDevice: widget.controller.filePickerDelegate ??
+          (widget.controller.attachmentPickerDelegate != null
+              ? () => widget.controller
+                  .attachmentPickerDelegate!(SmartAttachmentType.document)
+              : null),
+    ).then((data) {
+      if (data != null && data.src.isNotEmpty) {
+        final (blockIndex, _) = _getEffectiveSelection();
+        widget.controller.insertDocument(
+          src: data.src,
+          fileName: data.name ?? 'Attachment',
+          fileSize: data.fileSize,
+          fileExtension: data.fileExtension,
           blockIndex: blockIndex,
         );
         widget.onFormatApplied?.call();
@@ -616,51 +779,87 @@ class SmartToolbarState extends State<SmartToolbar> {
         );
         break;
       case SmartToolbarType.grid:
+        final gridItems = _buildToolbarItems(
+          onSurface: onSurface,
+          activeColor: activeColor,
+          activeBg: activeBg,
+          disabledColor: disabledColor,
+          dividerColor: dividerColor,
+          includeSeparators: false,
+        );
         content = Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Wrap(
             spacing: widget.settings.gridSpacingH,
             runSpacing: widget.settings.gridSpacingV,
-            children: toolbarItems,
+            children: gridItems,
           ),
         );
         break;
       case SmartToolbarType.expandable:
-        content = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  ...toolbarItems,
-                  IconButton(
-                    icon: Icon(_expanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down),
-                    onPressed: () {
-                      setState(() {
-                        _expanded = !_expanded;
-                      });
-                    },
-                  ),
-                ],
-              ),
+        final expandButton = SizedBox(
+          height: widget.settings.itemHeight,
+          width: widget.settings.itemHeight,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            iconSize: widget.settings.buttonIconSize,
+            icon: Icon(
+              _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+              color: onSurface,
             ),
-            if (_expanded)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Wrap(
-                  spacing: widget.settings.gridSpacingH,
-                  runSpacing: widget.settings.gridSpacingV,
-                  children: toolbarItems,
+            tooltip: _expanded ? 'Collapse toolbar' : 'Expand toolbar',
+            onPressed: () {
+              setState(() {
+                _expanded = !_expanded;
+              });
+            },
+          ),
+        );
+
+        if (_expanded) {
+          final wrapItems = _buildToolbarItems(
+            onSurface: onSurface,
+            activeColor: activeColor,
+            activeBg: activeBg,
+            disabledColor: disabledColor,
+            dividerColor: dividerColor,
+            includeSeparators: false,
+          );
+          content = Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Wrap(
+                    spacing: widget.settings.gridSpacingH,
+                    runSpacing: widget.settings.gridSpacingV,
+                    children: wrapItems,
+                  ),
                 ),
               ),
-          ],
-        );
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: expandButton,
+              ),
+            ],
+          );
+        } else {
+          content = Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: toolbarItems,
+                  ),
+                ),
+              ),
+              expandButton,
+            ],
+          );
+        }
         break;
     }
 
@@ -701,13 +900,16 @@ class SmartToolbarState extends State<SmartToolbar> {
     required Color activeBg,
     required Color disabledColor,
     required Color dividerColor,
+    bool includeSeparators = true,
   }) {
     final items = <Widget>[];
 
     for (var i = 0; i < widget.settings.defaultButtons.length; i++) {
       final group = widget.settings.defaultButtons[i];
 
-      if (items.isNotEmpty && widget.settings.showSeparators) {
+      if (items.isNotEmpty &&
+          widget.settings.showSeparators &&
+          includeSeparators) {
         items.add(_buildSeparator(dividerColor));
       }
 

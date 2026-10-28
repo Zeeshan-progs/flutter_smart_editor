@@ -1,10 +1,10 @@
 import 'package:meta/meta.dart';
 import 'package:flutter_smart_editor/src/core/document/document.dart';
 import '../../../models/search/search_index.dart';
-import 'image_document_controller.dart';
+import 'attachment_document_controller.dart';
 
 /// Controller handling live document searching, regex parsing, and atomic match replacement.
-class SearchDocumentController extends ImageDocumentController {
+class SearchDocumentController extends AttachmentDocumentController {
   SearchDocumentController({
     super.document,
     super.undoRedoManager,
@@ -39,7 +39,9 @@ class SearchDocumentController extends ImageDocumentController {
     final matches = <SearchMatch>[];
     var globalMatchIndex = 0;
 
-    for (var blockIndex = 0; blockIndex < document.blocks.length; blockIndex++) {
+    for (var blockIndex = 0;
+        blockIndex < document.blocks.length;
+        blockIndex++) {
       final block = document.blocks[blockIndex];
 
       if (block is TableNode) {
@@ -92,8 +94,8 @@ class SearchDocumentController extends ImageDocumentController {
             blockIndex: blockIndex,
             start: match.start,
             end: match.end,
-            matchedText: match.group(0) ??
-                plainText.substring(match.start, match.end),
+            matchedText:
+                match.group(0) ?? plainText.substring(match.start, match.end),
             linkUrl: linkUrl,
           ));
         }

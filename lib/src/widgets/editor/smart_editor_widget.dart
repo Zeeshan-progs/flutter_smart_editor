@@ -11,13 +11,16 @@ import '../../models/search/search_index.dart';
 import '../blocks/block_widget.dart';
 import '../blocks/table_block_widget.dart';
 import '../blocks/image_block_widget.dart';
+import '../blocks/video_block_widget.dart';
+import '../blocks/audio_block_widget.dart';
+import '../blocks/document_block_widget.dart';
 import 'states/base_editor_state.dart';
 import 'states/block_editor_state.dart';
 import 'states/text_editor_state.dart';
 import 'states/selection_editor_state.dart';
 import 'states/link_editor_state.dart';
 import 'states/table_editor_state.dart';
-import 'states/image_editor_state.dart';
+import 'states/attachment_editor_state.dart';
 import 'states/search_editor_state.dart';
 
 export 'states/base_editor_state.dart';
@@ -26,7 +29,7 @@ export 'states/text_editor_state.dart';
 export 'states/selection_editor_state.dart';
 export 'states/link_editor_state.dart';
 export 'states/table_editor_state.dart';
-export 'states/image_editor_state.dart';
+export 'states/attachment_editor_state.dart';
 export 'states/search_editor_state.dart';
 
 /// The main editor widget that renders the document as a list of blocks.
@@ -65,7 +68,7 @@ class SmartEditorWidget extends StatefulWidget {
 /// - [SelectionEditorMixin]: Cursor position, selections, pending inline formats, and format probes.
 /// - [LinkEditorMixin]: Hyperlink floating tooltips, inspection, editing, and dialog transitions.
 /// - [TableEditorMixin]: Table cell selection, cell focus, cell editing, and cell-level formatting.
-/// - [ImageEditorMixin]: Image block selection, alignment, resizing, and removal operations.
+/// - [AttachmentEditorMixin]: Attachment block selection, alignment, resizing, and removal operations.
 /// - [SearchEditorMixin]: Find & Replace live search match scrolling, highlighting focus, and state updates.
 class SmartEditorWidgetState extends BaseEditorState
     with
@@ -74,7 +77,7 @@ class SmartEditorWidgetState extends BaseEditorState
         SelectionEditorMixin,
         LinkEditorMixin,
         TableEditorMixin,
-        ImageEditorMixin,
+        AttachmentEditorMixin,
         SearchEditorMixin {
   /// Called when a block is reordered
   void _onReorder(int oldUnitIndex, int newUnitIndex) {
@@ -233,6 +236,72 @@ class SmartEditorWidgetState extends BaseEditorState
         onResize: (width, height) =>
             onImageResize(index, width: width, height: height),
         onCrop: (cropped) => onImageCrop(index, cropped),
+      );
+    }
+
+    // Video blocks use VideoBlockWidget
+    if (block is VideoNode) {
+      return VideoBlockWidget(
+        key: ValueKey('vid_${block.id}'),
+        videoNode: block,
+        blockIndex: index,
+        editorSettings: widget.editorSettings,
+        isSelected: isMediaSelected(index),
+        isDarkMode: isDark,
+        readOnly:
+            widget.editorSettings.disabled || widget.editorSettings.readOnly,
+        showDragHandle: showDragHandle,
+        dragIndex: dragIndex,
+        onTap: () => onMediaTap(index),
+        onRemove: () => onVideoRemove(index),
+        onReplace: () => onVideoReplace(index),
+        onHideControls: deselectMedia,
+        onAlignmentChanged: (alignment) => onVideoAlignment(index, alignment),
+        onResize: (width, height) =>
+            onVideoResize(index, width: width, height: height),
+      );
+    }
+
+    // Audio blocks use AudioBlockWidget
+    if (block is AudioNode) {
+      return AudioBlockWidget(
+        key: ValueKey('aud_${block.id}'),
+        audioNode: block,
+        blockIndex: index,
+        editorSettings: widget.editorSettings,
+        isSelected: isMediaSelected(index),
+        isDarkMode: isDark,
+        readOnly:
+            widget.editorSettings.disabled || widget.editorSettings.readOnly,
+        showDragHandle: showDragHandle,
+        dragIndex: dragIndex,
+        onTap: () => onMediaTap(index),
+        onRemove: () => onAudioRemove(index),
+        onReplace: () => onAudioReplace(index),
+        onHideControls: deselectMedia,
+        onAlignmentChanged: (alignment) => onAudioAlignment(index, alignment),
+      );
+    }
+
+    // Document / File attachment blocks use DocumentBlockWidget
+    if (block is DocumentNode) {
+      return DocumentBlockWidget(
+        key: ValueKey('doc_${block.id}'),
+        documentNode: block,
+        blockIndex: index,
+        editorSettings: widget.editorSettings,
+        isSelected: isMediaSelected(index),
+        isDarkMode: isDark,
+        readOnly:
+            widget.editorSettings.disabled || widget.editorSettings.readOnly,
+        showDragHandle: showDragHandle,
+        dragIndex: dragIndex,
+        onTap: () => onMediaTap(index),
+        onRemove: () => onDocumentRemove(index),
+        onReplace: () => onDocumentReplace(index),
+        onHideControls: deselectMedia,
+        onAlignmentChanged: (alignment) =>
+            onDocumentAlignment(index, alignment),
       );
     }
 

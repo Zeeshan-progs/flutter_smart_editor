@@ -150,7 +150,10 @@ class BlockDocumentController extends BaseDocumentController {
         break;
       case BlockType.table:
       case BlockType.image:
-        // Tables and images cannot be converted to/from other block types
+      case BlockType.video:
+      case BlockType.audio:
+      case BlockType.document:
+        // Tables, images, and media cannot be converted to/from other block types
         return;
     }
 

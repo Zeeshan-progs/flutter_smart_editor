@@ -27,11 +27,8 @@ class SmartToolbarSettings {
       SmartListButtons(hr: true),
       SmartInsertButtons(
         link: false,
-        picture: false,
-        audio: false,
-        video: false,
         table: false,
-        otherFile: false,
+        attachment: false,
       ),
     ],
     this.customButtons = const [],

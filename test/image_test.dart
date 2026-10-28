@@ -174,7 +174,7 @@ void main() {
   });
 
   group('Toolbar Image Button & Interaction Widget Tests', () {
-    testWidgets('SmartToolbar renders insert picture button when picture is true', (tester) async {
+    testWidgets('SmartToolbar renders insert attachment button when attachment is true', (tester) async {
       final controller = SmartEditorController();
 
       await tester.pumpWidget(
@@ -186,7 +186,7 @@ void main() {
                 defaultButtons: [
                   SmartInsertButtons(
                     link: true,
-                    picture: true,
+                    attachment: true,
                     table: true,
                   ),
                 ],
@@ -197,16 +197,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify the picture button with Icons.image_outlined exists
-      final pictureButtonFinder = find.byIcon(Icons.image_outlined);
-      expect(pictureButtonFinder, findsOneWidget);
+      // Verify the attachment button with Icons.attach_file exists
+      final attachmentButtonFinder = find.byIcon(Icons.attach_file);
+      expect(attachmentButtonFinder, findsOneWidget);
 
       // Verify tooltip
-      final tooltipFinder = find.byTooltip('Insert Image');
+      final tooltipFinder = find.byTooltip('Insert Attachment');
       expect(tooltipFinder, findsOneWidget);
     });
 
-    testWidgets('SmartToolbar does not render picture button when picture is false', (tester) async {
+    testWidgets('SmartToolbar does not render attachment button when attachment is false', (tester) async {
       final controller = SmartEditorController();
 
       await tester.pumpWidget(
@@ -218,7 +218,7 @@ void main() {
                 defaultButtons: [
                   SmartInsertButtons(
                     link: true,
-                    picture: false,
+                    attachment: false,
                     table: true,
                   ),
                 ],
@@ -229,11 +229,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final pictureButtonFinder = find.byIcon(Icons.image_outlined);
-      expect(pictureButtonFinder, findsNothing);
+      final attachmentButtonFinder = find.byIcon(Icons.attach_file);
+      expect(attachmentButtonFinder, findsNothing);
     });
 
-    testWidgets('Tapping image button opens ImageImportDialog', (tester) async {
+    testWidgets('Tapping single image attachment opens ImageImportDialog', (tester) async {
       final controller = SmartEditorController();
 
       await tester.pumpWidget(
@@ -244,7 +244,8 @@ void main() {
               toolbarSettings: const SmartToolbarSettings(
                 defaultButtons: [
                   SmartInsertButtons(
-                    picture: true,
+                    attachment: true,
+                    enabledAttachments: {SmartAttachmentType.image},
                   ),
                 ],
               ),
@@ -254,8 +255,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap the insert image button
-      await tester.tap(find.byIcon(Icons.image_outlined));
+      // Tap the insert attachment button (opens image directly since it is the only option)
+      await tester.tap(find.byIcon(Icons.attach_file));
       await tester.pumpAndSettle();
 
       // Verify that ImageImportDialog title/tabs appear

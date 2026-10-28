@@ -61,6 +61,12 @@ class StylePickerButton extends StatelessWidget {
         return 'Table';
       case BlockType.image:
         return 'Image';
+      case BlockType.video:
+        return 'Video';
+      case BlockType.audio:
+        return 'Audio';
+      case BlockType.document:
+        return 'Attachment';
     }
   }
 
@@ -68,7 +74,7 @@ class StylePickerButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isHeading = _styleOnlyTypes.contains(currentBlockType) &&
         currentBlockType != BlockType.paragraph;
-    
+
     final chipLabel = _styleOnlyTypes.contains(currentBlockType)
         ? _blockTypeLabel(currentBlockType)
         : 'Normal';
@@ -94,6 +100,7 @@ class StylePickerButton extends StatelessWidget {
                   isSelected ? Border.all(color: activeColor, width: 1) : null,
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(width: 8),
                 Text(

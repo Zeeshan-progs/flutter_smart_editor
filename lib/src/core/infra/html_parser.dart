@@ -88,6 +88,27 @@ class SmartHtmlParser {
       return;
     }
 
+    // Video tag
+    if (tag == 'video') {
+      final vid = _processVideoElement(element);
+      if (vid != null) blocks.add(vid);
+      return;
+    }
+
+    // Audio tag
+    if (tag == 'audio') {
+      final aud = _processAudioElement(element);
+      if (aud != null) blocks.add(aud);
+      return;
+    }
+
+    // Document / Attachment link tag at root
+    if (tag == 'a' && _isDocumentAttachment(element)) {
+      final doc = _processDocumentElement(element);
+      if (doc != null) blocks.add(doc);
+      return;
+    }
+
     // Handle block-level elements
     if (_isBlockTag(tag)) {
       final block = _createBlock(tag, element);
@@ -109,7 +130,7 @@ class SmartHtmlParser {
   bool _isBlockTag(String tag) {
     return const {
       'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div',
-      'ul', 'ol', 'hr', 'table', 'figure',
+      'ul', 'ol', 'hr', 'table', 'figure', 'video', 'audio',
     }.contains(tag);
   }
 
@@ -117,6 +138,12 @@ class SmartHtmlParser {
   BlockNode? _createBlock(String tag, dom.Element element) {
     // Horizontal rule
     if (tag == 'hr') return HorizontalRuleNode();
+
+    // Video tag
+    if (tag == 'video') return _processVideoElement(element);
+
+    // Audio tag
+    if (tag == 'audio') return _processAudioElement(element);
 
     // List containers — recurse into children
     if (tag == 'ul' || tag == 'ol') {
@@ -131,6 +158,30 @@ class SmartHtmlParser {
     if (imgElements.isNotEmpty && element.text.trim().isEmpty) {
       final img = _processImageElement(imgElements.first, parentAlignment: alignment);
       if (img != null) return img;
+    }
+
+    // If wraps a <video>
+    final videoElements = element.getElementsByTagName('video');
+    if (videoElements.isNotEmpty && element.text.trim().isEmpty) {
+      final vid = _processVideoElement(videoElements.first, parentAlignment: alignment);
+      if (vid != null) return vid;
+    }
+
+    // If wraps an <audio>
+    final audioElements = element.getElementsByTagName('audio');
+    if (audioElements.isNotEmpty && element.text.trim().isEmpty) {
+      final aud = _processAudioElement(audioElements.first, parentAlignment: alignment);
+      if (aud != null) return aud;
+    }
+
+    // If wraps a document attachment link
+    final aElements = element.getElementsByTagName('a');
+    if (aElements.isNotEmpty &&
+        element.children.length == 1 &&
+        element.children.first == aElements.first &&
+        _isDocumentAttachment(aElements.first)) {
+      final doc = _processDocumentElement(aElements.first, parentAlignment: alignment);
+      if (doc != null) return doc;
     }
 
     final spans = <TextFormatSpan>[];
@@ -514,6 +565,138 @@ class SmartHtmlParser {
       caption: caption,
       width: width,
       height: height,
+      alignment: alignment,
+    );
+  }
+
+  bool _isDocumentAttachment(dom.Element el) {
+    if (el.attributes.containsKey('data-attachment') &&
+        el.attributes['data-attachment'] == 'document') {
+      return true;
+    }
+    if (el.classes.contains('smart-attachment-file')) {
+      return true;
+    }
+    if (el.attributes.containsKey('download') &&
+        el.attributes.containsKey('href')) {
+      return true;
+    }
+    return false;
+  }
+
+  VideoNode? _processVideoElement(
+    dom.Element videoEl, {
+    SmartTextAlign? parentAlignment,
+  }) {
+    String? src = videoEl.attributes['src'];
+    if (src == null || src.isEmpty) {
+      final source = videoEl.getElementsByTagName('source');
+      if (source.isNotEmpty) {
+        src = source.first.attributes['src'];
+      }
+    }
+    if (src == null || src.isEmpty) return null;
+
+    final caption =
+        videoEl.attributes['data-caption'] ?? videoEl.attributes['title'];
+    final poster = videoEl.attributes['poster'];
+    final widthStr = videoEl.attributes['width'];
+    final heightStr = videoEl.attributes['height'];
+    final width = widthStr != null ? double.tryParse(widthStr) : null;
+    final height = heightStr != null ? double.tryParse(heightStr) : null;
+    final controls = !videoEl.attributes.containsKey('nocontrols');
+
+    var alignment = parentAlignment ?? _parseAlignment(videoEl);
+    final style = videoEl.attributes['style']?.toLowerCase() ?? '';
+    if (style.contains('margin-left: auto') &&
+        style.contains('margin-right: auto')) {
+      alignment = SmartTextAlign.center;
+    } else if (style.contains('margin-left: auto')) {
+      alignment = SmartTextAlign.right;
+    }
+
+    return VideoNode(
+      src: src,
+      caption: caption,
+      poster: poster,
+      width: width,
+      height: height,
+      controls: controls,
+      alignment: alignment,
+    );
+  }
+
+  AudioNode? _processAudioElement(
+    dom.Element audioEl, {
+    SmartTextAlign? parentAlignment,
+  }) {
+    String? src = audioEl.attributes['src'];
+    if (src == null || src.isEmpty) {
+      final source = audioEl.getElementsByTagName('source');
+      if (source.isNotEmpty) {
+        src = source.first.attributes['src'];
+      }
+    }
+    if (src == null || src.isEmpty) return null;
+
+    final title = audioEl.attributes['data-title'] ??
+        audioEl.attributes['title'] ??
+        (audioEl.text.trim().isNotEmpty ? audioEl.text.trim() : null);
+    final author = audioEl.attributes['data-author'];
+    final controls = !audioEl.attributes.containsKey('nocontrols');
+
+    var alignment = parentAlignment ?? _parseAlignment(audioEl);
+    final style = audioEl.attributes['style']?.toLowerCase() ?? '';
+    if (style.contains('margin-left: auto') &&
+        style.contains('margin-right: auto')) {
+      alignment = SmartTextAlign.center;
+    } else if (style.contains('margin-left: auto')) {
+      alignment = SmartTextAlign.right;
+    }
+
+    return AudioNode(
+      src: src,
+      title: title,
+      author: author,
+      controls: controls,
+      alignment: alignment,
+    );
+  }
+
+  DocumentNode? _processDocumentElement(
+    dom.Element aEl, {
+    SmartTextAlign? parentAlignment,
+  }) {
+    final href = aEl.attributes['href'];
+    if (href == null || href.isEmpty) return null;
+
+    final fileName = aEl.attributes['download']?.isNotEmpty == true
+        ? aEl.attributes['download']!
+        : (aEl.text.trim().isNotEmpty
+            ? aEl.text.trim()
+            : href.split('/').last);
+
+    final fileSizeStr = aEl.attributes['data-file-size'];
+    final fileSize = fileSizeStr != null ? int.tryParse(fileSizeStr) : null;
+    final fileExt = aEl.attributes['data-file-extension'] ??
+        (fileName.contains('.') ? fileName.split('.').last : null);
+
+    var alignment = parentAlignment ?? _parseAlignment(aEl);
+    final style = aEl.attributes['style']?.toLowerCase() ?? '';
+    if (style.contains('text-align: center') ||
+        (style.contains('margin-left: auto') &&
+            style.contains('margin-right: auto'))) {
+      alignment = SmartTextAlign.center;
+    } else if (style.contains('text-align: right') ||
+        style.contains('margin-left: auto')) {
+      alignment = SmartTextAlign.right;
+    }
+
+    return DocumentNode(
+      src: href,
+      fileName: fileName,
+      fileSize: fileSize,
+      fileExtension: fileExt,
       alignment: alignment,
     );
   }

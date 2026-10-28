@@ -69,7 +69,11 @@ mixin SelectionEditorMixin on BaseEditorState {
       // while the block still HAS focus. If focus was lost (blur), preserve range!
       toolbarRangeSelection = null;
       toolbarRangeBlockIndex = null;
-      checkLinkTooltip(blockIndex, minOffset);
+      if (!isTyping) {
+        checkLinkTooltip(blockIndex, minOffset);
+      } else {
+        hideLinkTooltip();
+      }
     } else {
       hideLinkTooltip();
     }

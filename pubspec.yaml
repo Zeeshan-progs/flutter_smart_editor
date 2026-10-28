@@ -1,18 +1,37 @@
 name: flutter_smart_editor
 description: A pure Flutter rich text HTML editor with no WebView dependency. Fully customizable with granular settings for editor, toolbar, scroll, keyboard, selection, and styling.
-version: 2.2.0
+version: 2.3.0
 homepage: https://github.com/Zeeshan-progs/flutter_smart_editor
+
+screenshots:
+  - description: "Pure Dart and Flutter rich text HTML editor without WebViews"
+    path: screenshots/se_pure_dart.png
+  - description: "Clean and modern light mode rich text editor"
+    path: screenshots/se_light_mode.png
+  - description: "Rich text formatting, font styles, and colors in dark mode"
+    path: screenshots/se_text_style_dark_mode.png
+  - description: "Rich text formatting, font styles, and colors in light mode"
+    path: screenshots/se_text_style_light_mode.png
+  - description: "Customizable Material 3 toolbars with scrollable, grid, and expandable layouts"
+    path: screenshots/se_toolbars.png
+  - description: "Support for images, videos, audio, and document attachments"
+    path: screenshots/se_attachments.png
+  - description: "Floating find and replace bar with real-time match highlighting"
+    path: screenshots/se_find_replace.png
+  - description: "Interactive hyperlink insertion, editing, and preview tooltips"
+    path: screenshots/se_link_preview.png
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
   flutter: ">=3.27.0"
 
 dependencies:
+  file_picker: ^11.0.3
   flutter:
     sdk: flutter
   flutter_colorpicker: ^1.1.0
   html: ^0.15.4
-  image_cropper: ^12.2.1
+  image_cropper: ^11.0.0
   image_picker: ^1.2.3
   meta: ">=1.0.0 <2.0.0"
   path_provider: ^2.1.6

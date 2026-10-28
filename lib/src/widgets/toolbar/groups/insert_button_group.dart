@@ -53,15 +53,16 @@ class InsertButtonGroup extends StatelessWidget {
       ));
     }
 
-    // ── Insert Picture ──
-    if (group.picture) {
-      buttons.add(_InsertPictureButton(
+    // ── Insert Attachment (Common button for images, videos, audio, files) ──
+    if (group.attachment && group.enabledAttachments.isNotEmpty) {
+      buttons.add(_InsertAttachmentButton(
         onAction: onAction,
         onSurface: onSurface,
         disabledColor: disabledColor,
         enabled: enabled,
         itemHeight: itemHeight,
         buttonIconSize: buttonIconSize,
+        customIcon: group.attachmentIcon,
       ));
     }
 
@@ -122,9 +123,8 @@ class _InsertLinkButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled
-        ? (isActive ? activeColor : onSurface)
-        : disabledColor;
+    final color =
+        enabled ? (isActive ? activeColor : onSurface) : disabledColor;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1),
@@ -152,15 +152,16 @@ class _InsertLinkButton extends StatelessWidget {
   }
 }
 
-/// The "Insert Picture" button.
-class _InsertPictureButton extends StatelessWidget {
-  const _InsertPictureButton({
+/// The common "Insert Attachment" button.
+class _InsertAttachmentButton extends StatelessWidget {
+  const _InsertAttachmentButton({
     required this.onAction,
     required this.onSurface,
     required this.disabledColor,
     required this.enabled,
     required this.itemHeight,
     required this.buttonIconSize,
+    this.customIcon,
   });
 
   final Function(SmartButtonType type, {dynamic value}) onAction;
@@ -169,21 +170,23 @@ class _InsertPictureButton extends StatelessWidget {
   final bool enabled;
   final double itemHeight;
   final double buttonIconSize;
+  final IconData? customIcon;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: Tooltip(
-        message: 'Insert Image',
+        message: 'Insert Attachment',
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
-          onTap: enabled ? () => onAction(SmartButtonType.insertImage) : null,
+          onTap:
+              enabled ? () => onAction(SmartButtonType.insertAttachment) : null,
           child: SizedBox(
             width: itemHeight,
             height: itemHeight,
             child: Icon(
-              Icons.image_outlined,
+              customIcon ?? Icons.attach_file,
               size: buttonIconSize,
               color: enabled ? onSurface : disabledColor,
             ),
@@ -223,7 +226,8 @@ class _InsertTableButton extends StatelessWidget {
       ),
       builder: (ctx) => TableGridPicker(
         onSelect: (rows, cols) {
-          onAction(SmartButtonType.insertTable, value: {'rows': rows, 'cols': cols});
+          onAction(SmartButtonType.insertTable,
+              value: {'rows': rows, 'cols': cols});
         },
       ),
     );
